@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>2AFC GIN Test</title>
+ 
+  <script src='https://cdn.jsdelivr.net/npm/chart.js'></script>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; margin-top: 30px; }
+    button { margin: 10px; padding: 10px 20px; font-size: 16px; }
+    #status { margin-top: 20px; font-weight: bold; }
+    canvas { max-width: 800px; margin: 20px auto; }
+  </style>
+</head>
+<body>
+  <h1>2AFC Gaps-in-Noise Test</h1>
+  <button onclick="startTrial()">Play Trial</button>
+  <div id="choices" style="display:none;">
+    <p>Which interval had the gap?</p>
+    <button onclick="submitAnswer(1)">First</button>
+    <button onclick="submitAnswer(2)">Second</button>
+    <button onclick="submitAnswer('unsure')">Unsure</button>
+  </div>
+  <div id="status"></div>
+  <button onclick="exportResults()">Export Results</button>
+  <canvas id="performanceChart"></canvas>
+
+  <script>
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const gapOptions = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20];
+    let gapIndex = 5;
+    let correctInterval = 1;
+    let trialCount = 0;
+    const results = [];
+    const reversals = [];
+    let lastDirection = null;
+    const maxReversals = 5;
+
+    const ctx = document.getElementById('performanceChart').getContext('2d');
+    const chart = new Chart(ctx, {
+      type: 'scatter',
+      data: {
+        datasets: [
+          { label: 'Correct', data: [], backgroundColor: 'green' },
+          { label: 'Incorrect', data: [], backgroundColor: 'red' },
+          { label: 'Unsure', data: [], backgroundColor: 'yellow' },
+          {
+            label: 'Reversal',
+            data: [],
+            pointStyle: 'line',
+            showLine: true,
+            borderColor: 'blue',
+            borderWidth: 1
+          }
+        ]
+      },
+      options: {
+        scales: {
+          x: { title: { display: true, text: 'Trial' }, beginAtZero: true },
+          y: { title: { display: true, text: 'Gap Duration (ms)' }, min: 0, max: 22 }
+        }
+      }
+    });
+
+    function createNoiseBuffer(duration, gapMs = 0) {
+      const sampleRate = audioCtx.sampleRate;
+      const buffer = audioCtx.createBuffer(1, sampleRate * duration, sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+      if (gapMs > 0) {
+        const gapStart = Math.floor(data.length / 2 - sampleRate * (gapMs / 2000));
+        const gapEnd = gapStart + Math.floor(sampleRate * (gapMs / 1000));
+        for (let i = gapStart; i < gapEnd; i++) {
+          data[i] = 0;
+        }
+      }
+      return buffer;
+    }
+
+    function playBuffer(buffer, delay = 0) {
+      const source = audioCtx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(audioCtx.destination);
+      source.start(audioCtx.currentTime + delay);
+    }
+
+    function startTrial() {
+      if (reversals.length >= maxReversals) {
+        document.getElementById("status").textContent = "Test complete!";
+        estimateThreshold();
+        return;
+      }
+
+      document.getElementById("status").textContent = "Playing...";
+      document.getElementById("choices").style.display = "none";
+
+      correctInterval = Math.random() < 0.5 ? 1 : 2;
+      const gapMs = gapOptions[gapIndex];
+      const buffer1 = createNoiseBuffer(1, correctInterval === 1 ? gapMs : 0);
+      const buffer2 = createNoiseBuffer(1, correctInterval === 2 ? gapMs : 0);
+
+      playBuffer(buffer1, 0);
+      playBuffer(buffer2, 1.5);
+
+      setTimeout(() => {
+        document.getElementById("choices").style.display = "block";
+        document.getElementById("status").textContent = "";
+      }, 3000);
+    }
+
+    function submitAnswer(choice) {
+      const gapMs = gapOptions[gapIndex];
+      trialCount++;
+      let isCorrect = null;
+
+      if (choice === 'unsure') {
+        results.push({ trial: trialCount, gapMs, correct: 'unsure' });
+        chart.data.datasets[2].data.push({ x: trialCount, y: gapMs });
+        reversals.push(trialCount);
+        chart.data.datasets[3].data.push({ x: trialCount, y: gapMs });
+        document.getElementById("status").textContent = "Marked as unsure.";
+      } else {
+        isCorrect = choice === correctInterval;
+        results.push({ trial: trialCount, gapMs, correct: isCorrect });
+
+        chart.data.datasets[isCorrect ? 0 : 1].data.push({ x: trialCount, y: gapMs });
+
+        const prevGapIndex = gapIndex;
+        if (isCorrect && gapIndex > 0) gapIndex--;
+        else if (!isCorrect && gapIndex < gapOptions.length - 1) gapIndex++;
+
+        const direction = gapIndex > prevGapIndex ? 'up' : gapIndex < prevGapIndex ? 'down' : 'same';
+        if (lastDirection && direction !== lastDirection && direction !== 'same') {
+          reversals.push(trialCount);
+          chart.data.datasets[3].data.push({ x: trialCount, y: gapMs });
+        }
+        lastDirection = direction;
+
+        document.getElementById("status").textContent = isCorrect ? "Correct!" : "Incorrect.";
+      }
+
+      chart.update();
+      document.getElementById("choices").style.display = "none";
+
+      if (reversals.length >= maxReversals) {
+        document.getElementById("status").textContent += " Test complete!";
+        estimateThreshold();
+      }
+    }
+
+    function estimateThreshold() {
+      const corrects = results.filter(r => r.correct === true).slice(-3);
+      if (corrects.length === 3) {
+        const avg = corrects.reduce((sum, r) => sum + r.gapMs, 0) / 3;
+        document.getElementById("status").textContent += ` Estimated threshold: ${avg.toFixed(2)} ms`;
+      }
+    }
+
+    function exportResults() {
+      let csv = "Trial,Gap(ms),Response\n";
+      results.forEach(r => {
+        csv += `${r.trial},${r.gapMs},${r.correct}\n`;
+      });
+      const blob = new Blob([csv], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "gin_test_results.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+  </script>
+</body>
+</html>
