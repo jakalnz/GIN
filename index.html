@@ -58,18 +58,22 @@
         // Add buttons for duration control after the existing buttons
         const durationButton = document.createElement('button');
         durationButton.id = 'durationButton';
-        durationButton.innerText = 'Toggle Duration (500ms/1000ms)';
+        durationButton.innerText = 'Duration 500ms';
         durationButton.style.margin = '10px';
         document.getElementById('downloadButton').insertAdjacentElement('afterend', durationButton);
+        // Update feedback display to include duration information
+        document.getElementById('feedback').innerText = `Sound Duration: ${soundDuration * 1000}ms, Gap at: ${gapStartTime * 1000}ms`;  
 
         // Add click handler for duration toggle
         durationButton.addEventListener('click', () => {
             if (soundDuration === 0.5) {
                 soundDuration = 1.0;
                 gapStartTime = 0.5;
+                durationButton.innerText = 'Duration 1000ms';
             } else {
                 soundDuration = 0.5;
                 gapStartTime = 0.25;
+                durationButton.innerText = 'Duration 500ms';
             }
             document.getElementById('feedback').innerText = `Sound Duration: ${soundDuration * 1000}ms, Gap at: ${gapStartTime * 1000}ms`;
         });
