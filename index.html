@@ -1,0 +1,235 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GIN Behavioral Test -V3</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }
+        button { padding: 10px 20px; margin: 10px; font-size: 16px; }
+        #feedback { margin-top: 20px; font-size: 18px; }
+    </style>
+</head>
+<body>
+    <h1>Gaps-in-Noise (GIN) Behavioral Test v3</h1>
+    <button id="playSound">Play Sound</button>
+    <button id="yesButton">Yes, I heard a gap</button>
+    <button id="noButton">No, I didn't hear a gap</button>
+    <button id="resetButton">Reset</button>
+    <button id="downloadButton">Download Results</button>
+    <div id="feedback"></div>
+    <footer> <br><br>This is a simple GIN thresholding test (Staircase Method): <br>
+        You will be presented with a 500ms long sound clip when you press [Play Sound].<br> Your task is to determine whether there is a gap in the sound. If you hear a gap, click the 'Yes' button. If you don't hear a gap, click the 'No' button. The test will continue for 20 trials. <br>The threshold will be calculated based on your last 4 responses. <br> If you provide a false positive the test will extend by 5 trials!
+        <br>
+        <br>
+        
+    </footer>
+
+    <script>
+        let audioContext = null;
+        let responses = [];
+        let correctResponses = 0;
+        let totalTrials = 0;
+
+        function initAudio() {
+            if (audioContext === null) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            return audioContext;
+        }
+
+        function generateNoiseBuffer(duration) {
+            const sampleRate = audioContext.sampleRate;
+            const bufferSize = Math.floor(sampleRate * duration);
+            const buffer = audioContext.createBuffer(1, bufferSize, sampleRate);
+            const data = buffer.getChannelData(0);
+            
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = (Math.random() * 2 - 1) * 0.5; // Reduced amplitude to 0.5
+            }
+            return buffer;
+        }
+
+        // Add duration control variables at the top with other variables
+        let soundDuration = 0.5; // Default 500ms
+        let gapStartTime = 0.25; // Default 250ms
+
+        // Add buttons for duration control after the existing buttons
+        const durationButton = document.createElement('button');
+        durationButton.id = 'durationButton';
+        durationButton.innerText = 'Toggle Duration (500ms/1000ms)';
+        durationButton.style.margin = '10px';
+        document.getElementById('downloadButton').insertAdjacentElement('afterend', durationButton);
+
+        // Add click handler for duration toggle
+        durationButton.addEventListener('click', () => {
+            if (soundDuration === 0.5) {
+                soundDuration = 1.0;
+                gapStartTime = 0.5;
+            } else {
+                soundDuration = 0.5;
+                gapStartTime = 0.25;
+            }
+            document.getElementById('feedback').innerText = `Sound Duration: ${soundDuration * 1000}ms, Gap at: ${gapStartTime * 1000}ms`;
+        });
+
+        // Update playSound function to use the new duration variables
+        async function playSound() {
+            try {
+                const ctx = initAudio();
+                await ctx.resume();
+                
+                const source = ctx.createBufferSource();
+                const gainNode = ctx.createGain();
+                const buffer = generateNoiseBuffer(soundDuration); // Use variable duration
+                
+                source.buffer = buffer;
+                gainNode.gain.value = 1.0;
+                
+                const gapDuration = gapDurations[currentGapIndex];
+                const currentGapStart = ctx.currentTime + gapStartTime; // Use variable gap start
+                
+                source.connect(gainNode);
+                gainNode.connect(ctx.destination);
+                
+                if (gapDuration > 0) {
+                    gainNode.gain.setValueAtTime(1.0, ctx.currentTime);
+                    gainNode.gain.setValueAtTime(0.0, currentGapStart);
+                    gainNode.gain.setValueAtTime(1.0, currentGapStart + (gapDuration / 1000));
+                }
+                
+                source.start();
+                console.log('Playing sound:', { duration: soundDuration * 1000 + 'ms', gapAt: gapStartTime * 1000 + 'ms', gapDuration: gapDuration + 'ms' });
+            } catch (error) {
+                console.error('Error playing sound:', error);
+            }
+        }
+
+        // Remove duplicate event listener and function definitions
+        document.getElementById("playSound").removeEventListener("click", playSound);
+        document.getElementById("playSound").addEventListener("click", playSound);
+        let gapDurations = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20];
+        let currentGapIndex = 5;  // Index 5 corresponds to 10ms
+
+        let maxTrials = 20;
+        let trialsDisplay = document.createElement('div');
+        trialsDisplay.id = 'trialsRemaining';
+        trialsDisplay.style.margin = '20px';
+        document.body.insertBefore(trialsDisplay, document.getElementById('feedback'));
+
+        function updateTrialsDisplay() {
+            trialsDisplay.innerText = `Trials remaining: ${maxTrials - totalTrials}`;
+        }
+
+        function logResponse(response) {
+            let gapDuration = gapDurations[currentGapIndex];
+            
+            totalTrials++;
+            updateTrialsDisplay();
+
+            // Check for false positive (reporting gap when there isn't one)
+            if (response === "yes" && gapDuration === 0) {
+                maxTrials += 5;
+                document.getElementById("feedback").innerText = "Warning: Test has been extended by 5 trials due to false positive response.";
+                updateTrialsDisplay();
+            }
+
+            if ((response === "yes" && gapDuration > 0) || (response === "no" && gapDuration === 0)) {
+                correctResponses++;
+                currentGapIndex = Math.max(0, currentGapIndex - 1);
+            } else {
+                currentGapIndex = Math.min(gapDurations.length - 1, currentGapIndex + 1);
+            }
+
+            let accuracy = (correctResponses / totalTrials) * 100;
+            responses.push({ trial: totalTrials + 1, gapDuration: gapDuration, response: response, accuracy: accuracy.toFixed(2) });
+
+            if (totalTrials >= maxTrials) {
+                let last4Gaps = responses.slice(-4).map(r => r.gapDuration);
+                let threshold = last4Gaps.reduce((a, b) => a + b, 0) / last4Gaps.length;
+                document.getElementById("feedback").innerText = `Test Complete!\nAccuracy: ${accuracy.toFixed(2)}%\nEstimated Threshold: ${threshold.toFixed(1)} ms`;
+            }
+        }
+
+        function resetTest() {
+            responses = [];
+            correctResponses = 0;
+            totalTrials = 0;
+            maxTrials = 20;
+            currentGapIndex = 5;
+            document.getElementById("feedback").innerText = "";
+            updateTrialsDisplay();
+        }
+
+        // Initialize trials display
+        updateTrialsDisplay();
+
+        // Initialize audio context when the play button is clicked
+        document.getElementById("playSound").addEventListener("click", async () => {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            await audioContext.resume(); // Ensure audio context is running
+            playSound();
+        });
+
+        function generateNoiseBuffer(duration) {
+            const sampleRate = audioContext.sampleRate;
+            const bufferSize = Math.floor(sampleRate * duration);
+            const buffer = audioContext.createBuffer(1, bufferSize, sampleRate);
+            const data = buffer.getChannelData(0);
+            
+            // Generate white noise with consistent amplitude
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = (Math.random() * 2 - 1) * 0.5; // Reduced amplitude to 0.5
+            }
+            return buffer;
+        }
+
+        function playSound() {
+            // Create a new buffer for each play to ensure fresh noise
+            const buffer = generateNoiseBuffer(0.5);
+            const source = audioContext.createBufferSource();
+            const gainNode = audioContext.createGain();
+            
+            source.buffer = buffer;
+            gainNode.gain.value = 1.0; // Set initial gain
+            
+            const gapDuration = gapDurations[currentGapIndex];
+            if (gapDuration > 0) {
+                const gapStartTime = audioContext.currentTime + 0.25;
+                gainNode.gain.setValueAtTime(1.0, audioContext.currentTime);
+                gainNode.gain.setValueAtTime(0.0, gapStartTime);
+                gainNode.gain.setValueAtTime(1.0, gapStartTime + (gapDuration / 1000));
+            }
+            
+            source.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            source.start(audioContext.currentTime);
+        }
+
+        function downloadResults() {
+            let csvContent = "data:text/csv;charset=utf-8,";
+            csvContent += "Trial,Gap Duration (ms),Response\n";
+            responses.forEach(response => {
+                csvContent += `${response.trial},${response.gapDuration},${response.response},${response.accuracy}\n`;
+            });
+
+            let encodedUri = encodeURI(csvContent);
+            let link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "gin_behavioral_test_results.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        document.getElementById("playSound").addEventListener("click", playSound);
+        document.getElementById("yesButton").addEventListener("click", () => logResponse("yes"));
+        document.getElementById("noButton").addEventListener("click", () => logResponse("no"));
+        document.getElementById("resetButton").addEventListener("click", resetTest);
+        document.getElementById("downloadButton").addEventListener("click", downloadResults);
+    </script>
+</body>
+</html>
