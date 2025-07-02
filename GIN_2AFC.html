@@ -13,7 +13,7 @@
   </style>
 </head>
 <body>
-  <h1>2AFC Gaps-in-Noise Test</h1>
+  <h1>2AUFC Gaps-in-Noise Test v3</h1>
   <button onclick="startTrial()">Play Trial</button>
   <div id="choices" style="display:none;">
     <p>Which interval had the gap?</p>
@@ -118,13 +118,24 @@
       if (choice === 'unsure') {
         results.push({ trial: trialCount, gapMs, correct: 'unsure' });
         chart.data.datasets[2].data.push({ x: trialCount, y: gapMs });
-        reversals.push(trialCount);
-        chart.data.datasets[3].data.push({ x: trialCount, y: gapMs });
+        
+        // Treat 'unsure' as incorrect for gap duration adjustment
+        if (gapIndex < gapOptions.length - 1) {
+          gapIndex++;
+        }
+        
+        // Update direction for reversal detection
+        const direction = 'up';
+        if (lastDirection && direction !== lastDirection) {
+          reversals.push(trialCount);
+          chart.data.datasets[3].data.push({ x: trialCount, y: gapMs });
+        }
+        lastDirection = direction;
+        
         document.getElementById("status").textContent = "Marked as unsure.";
       } else {
         isCorrect = choice === correctInterval;
         results.push({ trial: trialCount, gapMs, correct: isCorrect });
-
         chart.data.datasets[isCorrect ? 0 : 1].data.push({ x: trialCount, y: gapMs });
 
         const prevGapIndex = gapIndex;
