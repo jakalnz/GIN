@@ -1,24 +1,75 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>GIN Behavioral Test -V3</title>
     <style>
-        body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }
-        button { padding: 10px 20px; margin: 10px; font-size: 16px; }
-        #feedback { margin-top: 20px; font-size: 18px; }
+        body { 
+            font-family: Arial, sans-serif; 
+            text-align: center; 
+            margin: 18px; 
+            padding-top: 12px;
+            -webkit-font-smoothing:antialiased;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
+
+        /* Larger, touch-friendly buttons and responsive layout */
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 6px;
+        }
+
+        button {
+            padding: 14px 20px;
+            margin: 6px;
+            font-size: 18px;
+            min-height: 56px;           /* recommended touch target */
+            min-width: 140px;
+            border-radius: 10px;
+            border: none;
+            background: #0078D4;
+            color: white;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.14);
+        }
+
+        button:active { transform: scale(0.995); }
+        button.secondary { background: #6c757d; }
+        button.warn { background: #d9534f; }
+
+        #feedback { margin-top: 18px; font-size: 18px; word-break: break-word; padding: 8px; }
+        footer { font-size: 15px; margin-top: 18px; line-height: 1.3; }
+
+        /* Mobile: full-width-ish buttons */
+        @media (max-width: 600px) {
+            button { width: 90%; max-width: 420px; font-size: 20px; }
+            .controls { gap: 10px; }
+            body { margin: 8px; }
+            footer { font-size: 14px; padding-bottom: 12px; }
+        }
     </style>
 </head>
 <body>
     <h1>Gaps-in-Noise (GIN) Behavioral Test v3</h1>
-    <button id="playSound">Play Sound</button>
-    <button id="yesButton">Yes, I heard a gap</button>
-    <button id="noButton">No, I didn't hear a gap</button>
-    <button id="resetButton">Reset</button>
-    <button id="downloadButton">Download Results</button>
-    <div id="feedback"></div>
+
+    <!-- buttons grouped for better responsive layout -->
+    <div class="controls" role="group" aria-label="Test controls">
+        <button id="playSound">Play Sound</button>
+        <button id="yesButton" class="secondary">Yes, I heard a gap</button>
+        <button id="noButton" class="secondary">No, I didn't hear a gap</button>
+        <button id="resetButton" class="warn">Reset</button>
+        <button id="downloadButton" class="secondary">Download Results</button>
+    </div>
+
+    <div id="feedback" aria-live="polite"></div>
     <footer> <br><br>This is a simple GIN thresholding test (Staircase Method): <br>
         You will be presented with a 500ms long sound clip when you press [Play Sound].<br> Your task is to determine whether there is a gap in the sound. If you hear a gap, click the 'Yes' button. If you don't hear a gap, click the 'No' button. The test will continue for 20 trials. <br>The threshold will be calculated based on your last 4 responses. <br> If you provide a false positive the test will extend by 5 trials!
         <br>
@@ -55,27 +106,31 @@
         let soundDuration = 0.5; // Default 500ms
         let gapStartTime = 0.25; // Default 250ms
 
-        // Add buttons for duration control after the existing buttons
-        const durationButton = document.createElement('button');
-        durationButton.id = 'durationButton';
-        durationButton.innerText = 'Duration 500ms';
-        durationButton.style.margin = '10px';
-        document.getElementById('downloadButton').insertAdjacentElement('afterend', durationButton);
-        // Update feedback display to include duration information
-        document.getElementById('feedback').innerText = `Sound Duration: ${soundDuration * 1000}ms, Gap at: ${gapStartTime * 1000}ms`;  
+        // Move duration control creation to DOM-ready to avoid timing issues
+        document.addEventListener('DOMContentLoaded', () => {
+            // duration toggle button
+            const durationButton = document.createElement('button');
+            durationButton.id = 'durationButton';
+            durationButton.innerText = 'Duration 500ms';
+            durationButton.style.margin = '10px';
+            durationButton.className = 'secondary';
+            // place after controls
+            document.querySelector('.controls').insertAdjacentElement('afterend', durationButton);
+            // show initial feedback
+            document.getElementById('feedback').innerText = `Sound Duration: ${soundDuration * 1000}ms, Gap at: ${gapStartTime * 1000}ms`;  
 
-        // Add click handler for duration toggle
-        durationButton.addEventListener('click', () => {
-            if (soundDuration === 0.5) {
-                soundDuration = 1.0;
-                gapStartTime = 0.5;
-                durationButton.innerText = 'Duration 1000ms';
-            } else {
-                soundDuration = 0.5;
-                gapStartTime = 0.25;
-                durationButton.innerText = 'Duration 500ms';
-            }
-            document.getElementById('feedback').innerText = `Sound Duration: ${soundDuration * 1000}ms, Gap at: ${gapStartTime * 1000}ms`;
+            durationButton.addEventListener('click', () => {
+                if (soundDuration === 0.5) {
+                    soundDuration = 1.0;
+                    gapStartTime = 0.5;
+                    durationButton.innerText = 'Duration 1000ms';
+                } else {
+                    soundDuration = 0.5;
+                    gapStartTime = 0.25;
+                    durationButton.innerText = 'Duration 500ms';
+                }
+                document.getElementById('feedback').innerText = `Sound Duration: ${soundDuration * 1000}ms, Gap at: ${gapStartTime * 1000}ms`;
+            });
         });
 
         // Update playSound function to use the new duration variables
@@ -178,58 +233,59 @@
             playSound();
         });
 
-        function generateNoiseBuffer(duration) {
-            const sampleRate = audioContext.sampleRate;
-            const bufferSize = Math.floor(sampleRate * duration);
-            const buffer = audioContext.createBuffer(1, bufferSize, sampleRate);
-            const data = buffer.getChannelData(0);
-            
-            // Generate white noise with consistent amplitude
-            for (let i = 0; i < bufferSize; i++) {
-                data[i] = (Math.random() * 2 - 1) * 0.5; // Reduced amplitude to 0.5
-            }
-            return buffer;
-        }
+        // Prevent double-activation on touch devices:
+        let lastTouchTime = 0;
+        // Add touchstart handlers that trigger the button action immediately and suppress the following click.
+        function makeButtonsTouchFriendly() {
+            const allButtons = document.querySelectorAll('button');
+            allButtons.forEach(btn => {
+                // Trigger action on touchstart for snappy response
+                btn.addEventListener('touchstart', function (e) {
+                    lastTouchTime = Date.now();
+                    // Prevent the system from generating a synthetic mouse event later
+                    e.preventDefault();
+                    // Trigger native click handler
+                    btn.click();
+                }, {passive: false});
 
-        function playSound() {
-            // Create a new buffer for each play to ensure fresh noise
-            const buffer = generateNoiseBuffer(0.5);
-            const source = audioContext.createBufferSource();
-            const gainNode = audioContext.createGain();
-            
-            source.buffer = buffer;
-            gainNode.gain.value = 1.0; // Set initial gain
-            
-            const gapDuration = gapDurations[currentGapIndex];
-            if (gapDuration > 0) {
-                const gapStartTime = audioContext.currentTime + 0.25;
-                gainNode.gain.setValueAtTime(1.0, audioContext.currentTime);
-                gainNode.gain.setValueAtTime(0.0, gapStartTime);
-                gainNode.gain.setValueAtTime(1.0, gapStartTime + (gapDuration / 1000));
-            }
-            
-            source.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-            source.start(audioContext.currentTime);
-        }
-
-        function downloadResults() {
-            let csvContent = "data:text/csv;charset=utf-8,";
-            csvContent += "Trial,Gap Duration (ms),Response\n";
-            responses.forEach(response => {
-                csvContent += `${response.trial},${response.gapDuration},${response.response},${response.accuracy}\n`;
+                // Suppress the click event if it follows a recent touchstart (avoid double fire)
+                btn.addEventListener('click', function (e) {
+                    if (Date.now() - lastTouchTime < 700) {
+                        // already handled by touchstart
+                        e.stopImmediatePropagation();
+                        e.preventDefault();
+                        return;
+                    }
+                }, true);
             });
-
-            let encodedUri = encodeURI(csvContent);
-            let link = document.createElement("a");
-            link.setAttribute("href", encodedUri);
-            link.setAttribute("download", "gin_behavioral_test_results.csv");
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
         }
 
-        document.getElementById("playSound").addEventListener("click", playSound);
+        // Call once after the DOM is parsed and event listeners are attached.
+        window.addEventListener('load', () => {
+            makeButtonsTouchFriendly();
+        });
+
+        // Small debounce for play to avoid accidental multiple starts on double tap
+        let playLocked = false;
+        function safePlaySound() {
+            if (playLocked) return;
+            playLocked = true;
+            try { playSound(); } finally {
+                setTimeout(() => { playLocked = false; }, 600);
+            }
+        }
+
+        // Replace direct playSound binding with safePlaySound on mobile-ready handlers
+        document.getElementById("playSound").addEventListener("click", async () => {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            await audioContext.resume();
+            safePlaySound();
+        });
+
+        // Also wire touch-friendly click to existing touch logic in case durationButton insertion created other handlers.
+        // Ensure the standard handlers still exist (kept existing code wiring)
         document.getElementById("yesButton").addEventListener("click", () => logResponse("yes"));
         document.getElementById("noButton").addEventListener("click", () => logResponse("no"));
         document.getElementById("resetButton").addEventListener("click", resetTest);

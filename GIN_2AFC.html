@@ -6,29 +6,89 @@
  
   <script src='https://cdn.jsdelivr.net/npm/chart.js'></script>
   <style>
-    body { font-family: Arial, sans-serif; text-align: center; margin-top: 30px; }
-    button { margin: 10px; padding: 10px 20px; font-size: 16px; }
-    #status { margin-top: 20px; font-weight: bold; }
-    canvas { max-width: 800px; margin: 20px auto; }
+    :root{
+      --btn-bg: #0078D4;
+      --btn-secondary: #6c757d;
+      --btn-radius: 12px;
+      --touch-min: 56px;
+    }
+
+    html,body { height:100%; }
+    body { 
+      font-family: Arial, sans-serif; 
+      text-align: center; 
+      margin: 12px; 
+      padding-bottom: 24px;
+      -webkit-font-smoothing:antialiased;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      -ms-user-select: none;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    h1 { font-size: 1.4rem; margin-bottom: 12px; }
+
+    .controls { display:flex; flex-direction:column; align-items:center; gap:12px; margin:0 auto; max-width:420px; }
+
+    button {
+      width: 320px;
+      max-width: 92%;
+      padding: 14px 18px;
+      min-height: var(--touch-min);
+      font-size: 18px;
+      border-radius: var(--btn-radius);
+      border: none;
+      background: var(--btn-bg);
+      color: #fff;
+      box-shadow: 0 3px 8px rgba(0,0,0,0.14);
+      touch-action: manipulation;
+    }
+
+    button.secondary { background: var(--btn-secondary); }
+    button.small { width: 150px; min-height:48px; font-size:16px; }
+    #choices { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+
+    #status { margin-top: 12px; font-weight: 600; min-height: 1.2em; }
+    canvas { max-width: 900px; width: 100%; margin: 18px auto; display:block; }
+
+    @media (max-width:600px){
+      h1 { font-size: 1.2rem; }
+      button { font-size: 20px; min-height: 64px; }
+      .controls { gap:14px; }
+    }
   </style>
 </head>
 <body>
-  <h1>2AUFC Gaps-in-Noise Test v3</h1>
-  <button onclick="startTrial()">Play Trial</button>
-  <div id="choices" style="display:none;">
-    <p>Which interval had the gap?</p>
-    <button onclick="submitAnswer(1)">First</button>
-    <button onclick="submitAnswer(2)">Second</button>
-    <button onclick="submitAnswer('unsure')">Unsure</button>
+  <h2>Gaps-in-Noise Test (touch friendly)</h2>
+  <h1>Instructions</h1>
+  <p>In each trial, you will hear two intervals of white noise. One of the intervals will contain a brief silent gap. Your task is to identify which interval (first or second) contained the gap. If you are unsure, you can select "Unsure".</p>
+  <p>Press "Play Trial" to begin. After listening, select your answer. The gap duration will adjust based on your responses to find your threshold.</p>
+  <p>Try to minimize distractions and use headphones for the best experience.</p>
+
+
+  <div class="controls" role="group" aria-label="Test controls">
+    <button id="playBtn">Play Trial</button>
+
+    <div id="choices" aria-hidden="true">
+      <p style="width:100%;">Which interval had the gap?</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">
+        <button id="choice1" class="secondary">First</button>
+        <button id="choice2" class="secondary">Second</button>
+        <button id="choiceUnsure" class="secondary">Unsure</button>
+      </div>
+    </div>
+
+    <div id="status" aria-live="polite"></div>
+    <button id="exportBtn" class="secondary small">Export Results</button>
   </div>
-  <div id="status"></div>
-  <button onclick="exportResults()">Export Results</button>
-  <canvas id="performanceChart"></canvas>
+
+  <canvas id="performanceChart" aria-label="performance chart"></canvas>
 
   <script>
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const gapOptions = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20];
-    let gapIndex = 5;
+    const gapOptions = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 20];
+    let gapIndex = 10; // start at 10ms
     let correctInterval = 1;
     let trialCount = 0;
     const results = [];
@@ -36,6 +96,16 @@
     let lastDirection = null;
     const maxReversals = 5;
 
+    // UI elements
+    const playBtn = document.getElementById('playBtn');
+    const choice1 = document.getElementById('choice1');
+    const choice2 = document.getElementById('choice2');
+    const choiceUnsure = document.getElementById('choiceUnsure');
+    const choicesContainer = document.getElementById('choices');
+    const status = document.getElementById('status');
+    const exportBtn = document.getElementById('exportBtn');
+
+    // Chart
     const ctx = document.getElementById('performanceChart').getContext('2d');
     const chart = new Chart(ctx, {
       type: 'scatter',
@@ -43,7 +113,7 @@
         datasets: [
           { label: 'Correct', data: [], backgroundColor: 'green' },
           { label: 'Incorrect', data: [], backgroundColor: 'red' },
-          { label: 'Unsure', data: [], backgroundColor: 'yellow' },
+          { label: 'Unsure', data: [], backgroundColor: 'gold' },
           {
             label: 'Reversal',
             data: [],
@@ -55,6 +125,8 @@
         ]
       },
       options: {
+        responsive: true,
+        maintainAspectRatio: false,
         scales: {
           x: { title: { display: true, text: 'Trial' }, beginAtZero: true },
           y: { title: { display: true, text: 'Gap Duration (ms)' }, min: 0, max: 22 }
@@ -62,19 +134,17 @@
       }
     });
 
-    function createNoiseBuffer(duration, gapMs = 0) {
+    function createNoiseBuffer(durationSec, gapMs = 0) {
       const sampleRate = audioCtx.sampleRate;
-      const buffer = audioCtx.createBuffer(1, sampleRate * duration, sampleRate);
+      const length = Math.floor(sampleRate * durationSec);
+      const buffer = audioCtx.createBuffer(1, length, sampleRate);
       const data = buffer.getChannelData(0);
-      for (let i = 0; i < data.length; i++) {
-        data[i] = Math.random() * 2 - 1;
-      }
+      for (let i = 0; i < length; i++) data[i] = Math.random() * 2 - 1;
       if (gapMs > 0) {
-        const gapStart = Math.floor(data.length / 2 - sampleRate * (gapMs / 2000));
-        const gapEnd = gapStart + Math.floor(sampleRate * (gapMs / 1000));
-        for (let i = gapStart; i < gapEnd; i++) {
-          data[i] = 0;
-        }
+        const gapLen = Math.floor(sampleRate * (gapMs / 1000));
+        const gapStart = Math.floor(length / 2 - gapLen / 2);
+        const gapEnd = Math.min(length, gapStart + gapLen);
+        for (let i = gapStart; i < gapEnd; i++) data[i] = 0;
       }
       return buffer;
     }
@@ -86,28 +156,69 @@
       source.start(audioCtx.currentTime + delay);
     }
 
+    // Prevent double activation on touch devices & make touch quick
+    let lastTouchTime = 0;
+    function makeTouchFriendly(el, handler) {
+      // pointerdown preferred for broad device support
+      el.addEventListener('pointerdown', function (e) {
+        // only handle primary pointer
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        lastTouchTime = Date.now();
+        e.preventDefault();
+        handler(e);
+      }, { passive: false });
+
+      el.addEventListener('click', function (e) {
+        // suppress synthetic clicks following pointerdown
+        if (Date.now() - lastTouchTime < 700) {
+          e.stopImmediatePropagation();
+          e.preventDefault();
+          return;
+        }
+        handler(e);
+      }, true);
+    }
+
+    // Debounce play to avoid accidental double starts
+    let playLocked = false;
+    function safeStartTrial() {
+      if (playLocked) return;
+      playLocked = true;
+      try { startTrial(); } finally {
+        setTimeout(() => playLocked = false, 700);
+      }
+    }
+
     function startTrial() {
       if (reversals.length >= maxReversals) {
-        document.getElementById("status").textContent = "Test complete!";
+        status.textContent = "Test complete!";
         estimateThreshold();
         return;
       }
 
-      document.getElementById("status").textContent = "Playing...";
-      document.getElementById("choices").style.display = "none";
+      // Ensure audio context unlocked by user gesture
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume().catch(()=>{});
+      }
+
+      status.textContent = "Playing…";
+      choicesContainer.style.display = "none";
+      choicesContainer.setAttribute('aria-hidden','true');
 
       correctInterval = Math.random() < 0.5 ? 1 : 2;
       const gapMs = gapOptions[gapIndex];
-      const buffer1 = createNoiseBuffer(1, correctInterval === 1 ? gapMs : 0);
-      const buffer2 = createNoiseBuffer(1, correctInterval === 2 ? gapMs : 0);
+      const buffer1 = createNoiseBuffer(1.0, correctInterval === 1 ? gapMs : 0);
+      const buffer2 = createNoiseBuffer(1.0, correctInterval === 2 ? gapMs : 0);
 
       playBuffer(buffer1, 0);
       playBuffer(buffer2, 1.5);
 
+      // show choices after playback (slightly after last buffer ends)
       setTimeout(() => {
-        document.getElementById("choices").style.display = "block";
-        document.getElementById("status").textContent = "";
-      }, 3000);
+        choicesContainer.style.display = "block";
+        choicesContainer.setAttribute('aria-hidden','false');
+        status.textContent = "";
+      }, 3200);
     }
 
     function submitAnswer(choice) {
@@ -118,23 +229,16 @@
       if (choice === 'unsure') {
         results.push({ trial: trialCount, gapMs, correct: 'unsure' });
         chart.data.datasets[2].data.push({ x: trialCount, y: gapMs });
-        
-        // Treat 'unsure' as incorrect for gap duration adjustment
-        if (gapIndex < gapOptions.length - 1) {
-          gapIndex++;
-        }
-        
-        // Update direction for reversal detection
+        if (gapIndex < gapOptions.length - 1) gapIndex++;
         const direction = 'up';
         if (lastDirection && direction !== lastDirection) {
           reversals.push(trialCount);
           chart.data.datasets[3].data.push({ x: trialCount, y: gapMs });
         }
         lastDirection = direction;
-        
-        document.getElementById("status").textContent = "Marked as unsure.";
+        status.textContent = "Marked as unsure.";
       } else {
-        isCorrect = choice === correctInterval;
+        isCorrect = (choice === correctInterval);
         results.push({ trial: trialCount, gapMs, correct: isCorrect });
         chart.data.datasets[isCorrect ? 0 : 1].data.push({ x: trialCount, y: gapMs });
 
@@ -149,14 +253,15 @@
         }
         lastDirection = direction;
 
-        document.getElementById("status").textContent = isCorrect ? "Correct!" : "Incorrect.";
+        status.textContent = isCorrect ? "Correct!" : "Incorrect.";
       }
 
       chart.update();
-      document.getElementById("choices").style.display = "none";
+      choicesContainer.style.display = "none";
+      choicesContainer.setAttribute('aria-hidden','true');
 
       if (reversals.length >= maxReversals) {
-        document.getElementById("status").textContent += " Test complete!";
+        status.textContent += " Test complete!";
         estimateThreshold();
       }
     }
@@ -165,7 +270,9 @@
       const corrects = results.filter(r => r.correct === true).slice(-3);
       if (corrects.length === 3) {
         const avg = corrects.reduce((sum, r) => sum + r.gapMs, 0) / 3;
-        document.getElementById("status").textContent += ` Estimated threshold: ${avg.toFixed(2)} ms`;
+        status.textContent += ` Estimated threshold: ${avg.toFixed(2)} ms`;
+      } else {
+        status.textContent += ' Not enough correct trials to estimate threshold.';
       }
     }
 
@@ -182,6 +289,21 @@
       a.click();
       URL.revokeObjectURL(url);
     }
+
+    // wire up touch-friendly handlers
+    makeTouchFriendly(playBtn, () => safeStartTrial());
+    makeTouchFriendly(choice1, () => submitAnswer(1));
+    makeTouchFriendly(choice2, () => submitAnswer(2));
+    makeTouchFriendly(choiceUnsure, () => submitAnswer('unsure'));
+    makeTouchFriendly(exportBtn, () => exportResults());
+
+    // also allow keyboard activation
+    [playBtn, choice1, choice2, choiceUnsure, exportBtn].forEach(el=>{
+      el.addEventListener('keydown', (e)=> { if(e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.click(); }});
+    });
+
+    // keep chart height reasonable on load
+    document.getElementById('performanceChart').style.height = '320px';
   </script>
 </body>
 </html>
