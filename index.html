@@ -127,7 +127,7 @@
 
             <h3>Randomized gap window</h3>
             <ul>
-                <li>The gap's position within the burst is randomized on every trial (kept at least 60ms from the burst's start/end), rather than fixed at the midpoint.</li>
+                <li>The gap's position within the burst is randomized on every trial (kept at least 100ms from the burst's start/end), rather than fixed at the midpoint.</li>
                 <li>This prevents anticipating "when" the gap will occur and forces genuine gap detection rather than timing-based guessing.</li>
             </ul>
 
@@ -342,7 +342,7 @@
         // burst edges, and of the short onset/offset ramps used below) so the
         // gap timing can't be anticipated trial-to-trial.
         const RAMP_MS = 5; // fade duration at gap onset/offset, avoids audible clicks
-        const EDGE_MARGIN_MS = 60; // minimum distance from burst start/end
+        const EDGE_MARGIN_MS = 100; // minimum distance from burst start/end
 
         function randomizedGapStart(durationSec, gapMs) {
             const durationMs = durationSec * 1000;
