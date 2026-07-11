@@ -546,7 +546,7 @@
             chart.update();
 
             let accuracy = (correctResponses / totalTrials) * 100;
-            responses.push({ trial: totalTrials + 1, gapDuration: gapDuration, response: response, accuracy: accuracy.toFixed(2) });
+            responses.push({ trial: totalTrials, gapDuration: gapDuration, response: response, accuracy: accuracy.toFixed(2) });
 
             if (totalTrials >= maxTrials) {
                 let threshold;
@@ -649,12 +649,24 @@
             if (e.key === "Escape" && aboutOverlay.style.display === "block") closeAbout();
         });
 
+        // Chrome (unlike Firefox/Safari) keeps focus on a button after a
+        // mouse click, which would otherwise "trap" later Space/Y/N presses
+        // as a repeat-click on that stale button instead of reaching the
+        // keyboard shortcuts below. Blur any button right after it's
+        // clicked so focus returns to neutral.
+        document.addEventListener("click", (e) => {
+            if (e.target && e.target.tagName === "BUTTON") e.target.blur();
+        });
+
         // Desktop keyboard shortcuts: Space plays the sound, Y/N answer
-        // Yes/No. Ignored while typing into a form control (slider/select)
-        // so those keep their native keyboard behavior.
+        // Yes/No. Ignored while typing into a form control (slider/select),
+        // and while any button already has focus — a focused button handles
+        // Enter/Space itself natively, so we'd otherwise double-fire (e.g.
+        // pressing Space on a focused Yes/No button both answers the trial
+        // and starts a new one via this handler).
         document.addEventListener("keydown", (e) => {
             const tag = document.activeElement && document.activeElement.tagName;
-            if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+            if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || tag === "BUTTON") return;
 
             const playSoundBtn = document.getElementById("playSound");
             const yesBtn = document.getElementById("yesButton");

@@ -622,17 +622,29 @@
       if (e.key === 'Escape' && aboutOverlay.style.display === 'block') closeAbout();
     });
 
-    // also allow keyboard activation
-    [playBtn, choice1, choice2, exportBtn].forEach(el=>{
-      el.addEventListener('keydown', (e)=> { if(e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.click(); }});
+    // Chrome (unlike Firefox/Safari) keeps focus on a button after a mouse
+    // click, which would otherwise "trap" later Space/Enter presses as a
+    // repeat-click on that stale button instead of reaching our keyboard
+    // shortcuts below. Blur any button right after it's clicked so focus
+    // returns to neutral.
+    document.addEventListener('click', (e) => {
+      if (e.target && e.target.tagName === 'BUTTON') e.target.blur();
     });
 
+    // Note: native <button> elements already activate on Enter/Space when
+    // focused, so no extra keydown-to-click forwarding is needed for them —
+    // adding one here would double-fire alongside the global shortcut below
+    // (confirmed: tabbing to a button and pressing Space answered the trial
+    // *and* immediately started a new one via the global Space handler).
+
     // Desktop keyboard shortcuts: 1/2 pick First/Second, Space plays the trial.
-    // Ignored while typing into a form control (slider/select) so those keep
-    // their native keyboard behavior (arrow keys, space-to-open, etc).
+    // Ignored while typing into a form control (slider/select), and while any
+    // button already has focus — a focused button handles Enter/Space itself
+    // natively, so we'd otherwise double-fire (e.g. answering a trial via a
+    // focused choice button, then also starting a new one via this handler).
     document.addEventListener('keydown', (e) => {
       const tag = document.activeElement && document.activeElement.tagName;
-      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || tag === 'BUTTON') return;
 
       if (e.key === ' ' && !playBtn.disabled) {
         e.preventDefault();
