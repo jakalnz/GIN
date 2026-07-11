@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>GIN Behavioral Test -V3</title>
+    <script src='https://cdn.jsdelivr.net/npm/chart.js'></script>
     <style>
         :root{
             --btn-bg: #0078D4;
@@ -103,6 +104,12 @@
         #trialsRemaining { text-align: center; font-weight: 600; margin-bottom: 8px; }
         #feedback { text-align: center; font-size: 18px; word-break: break-word; white-space: pre-line; }
         #calibrationStatus { text-align: center; color: var(--muted); font-size: 0.95rem; }
+        .card-divider { border: none; border-top: 1px solid var(--card-border); margin: 16px 0; }
+        /* Chart.js with maintainAspectRatio:false needs an explicitly-sized,
+           non-auto-height parent, or the canvas and its container can grow
+           each other in a feedback loop. This wrapper provides that fixed height. */
+        .chart-wrap { position: relative; width: 100%; height: 320px; }
+        .chart-wrap canvas { width: 100% !important; height: 100% !important; }
 
         /* Mobile: full-width-ish buttons */
         @media (max-width: 600px) {
@@ -168,6 +175,10 @@
             <button id="downloadButton" class="secondary">Download Results</button>
             <button id="aboutButton" class="secondary" aria-haspopup="dialog">About This Procedure</button>
         </div>
+        <hr class="card-divider">
+        <div class="chart-wrap">
+            <canvas id="performanceChart" aria-label="performance chart"></canvas>
+        </div>
     </section>
   </div>
 
@@ -201,6 +212,8 @@
                 <li>Before any scored trial, you must play continuous calibration noise, adjust the volume slider to a comfortable level, and confirm it sounds correct for the selected channel.</li>
                 <li>The Play Sound / Yes / No controls are disabled (gated) until calibration is confirmed.</li>
                 <li>This standardizes relative comfort and verifies correct ear routing — it does <em>not</em> measure absolute sound pressure level (dB SPL), which depends on your specific headphones/speakers and device volume.</li>
+                <li>Clip duration (500ms/1000ms) is a one-time setup choice, not a per-trial control — it locks once calibration is confirmed so trials stay comparable within a session.</li>
+                <li>On desktop, keyboard shortcuts are available once calibration is confirmed: Space plays the sound, Y answers "Yes", N answers "No".</li>
             </ul>
 
             <h3>Practice block</h3>
@@ -231,6 +244,33 @@
         let reversals = [];
         let lastDirection = null;
         const REVERSALS_FOR_THRESHOLD = 6;
+
+        // Chart (scored trials only — practice trials are not plotted)
+        const chart = new Chart(document.getElementById('performanceChart').getContext('2d'), {
+            type: 'scatter',
+            data: {
+                datasets: [
+                    { label: 'Correct', data: [], backgroundColor: 'green' },
+                    { label: 'Incorrect', data: [], backgroundColor: 'red' },
+                    {
+                        label: 'Reversal',
+                        data: [],
+                        pointStyle: 'line',
+                        showLine: true,
+                        borderColor: 'blue',
+                        borderWidth: 1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { title: { display: true, text: 'Trial' }, beginAtZero: true },
+                    y: { title: { display: true, text: 'Gap Duration (ms)' }, min: 0, max: 22 }
+                }
+            }
+        });
 
         let inPractice = false;
         let practiceQueue = [];
@@ -384,6 +424,11 @@
             document.getElementById('playSound').disabled = !value;
             document.getElementById('yesButton').disabled = !value;
             document.getElementById('noButton').disabled = !value;
+            // Clip duration is a one-time setup choice, not a per-trial control —
+            // lock it once the test is underway so trials stay comparable within
+            // a session (matches the starting-gap lock in the 2AFC version).
+            const durationBtn = document.getElementById('durationButton');
+            if (durationBtn) durationBtn.disabled = value;
         }
 
         // Randomized gap position within the burst (keeps gap fully clear of the
@@ -479,7 +524,8 @@
             }
 
             let direction;
-            if ((response === "yes" && gapDuration > 0) || (response === "no" && gapDuration === 0)) {
+            const isCorrectThisTrial = (response === "yes" && gapDuration > 0) || (response === "no" && gapDuration === 0);
+            if (isCorrectThisTrial) {
                 correctResponses++;
                 direction = 'down';
                 currentGapIndex = Math.max(0, currentGapIndex - 1);
@@ -488,12 +534,16 @@
                 currentGapIndex = Math.min(gapDurations.length - 1, currentGapIndex + 1);
             }
 
+            chart.data.datasets[isCorrectThisTrial ? 0 : 1].data.push({ x: totalTrials, y: gapDuration });
+
             // A reversal is where the staircase changes direction; its stimulus
             // level (the gap just presented) is the value used for thresholding.
             if (lastDirection !== null && direction !== lastDirection) {
                 reversals.push(gapDuration);
+                chart.data.datasets[2].data.push({ x: totalTrials, y: gapDuration });
             }
             lastDirection = direction;
+            chart.update();
 
             let accuracy = (correctResponses / totalTrials) * 100;
             responses.push({ trial: totalTrials + 1, gapDuration: gapDuration, response: response, accuracy: accuracy.toFixed(2) });
@@ -525,6 +575,8 @@
             currentGapIndex = 5;
             reversals = [];
             lastDirection = null;
+            chart.data.datasets.forEach(d => d.data = []);
+            chart.update();
             document.getElementById("feedback").innerText = "";
             updateTrialsDisplay();
         }
@@ -595,6 +647,29 @@
         });
         document.addEventListener("keydown", (e) => {
             if (e.key === "Escape" && aboutOverlay.style.display === "block") closeAbout();
+        });
+
+        // Desktop keyboard shortcuts: Space plays the sound, Y/N answer
+        // Yes/No. Ignored while typing into a form control (slider/select)
+        // so those keep their native keyboard behavior.
+        document.addEventListener("keydown", (e) => {
+            const tag = document.activeElement && document.activeElement.tagName;
+            if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+
+            const playSoundBtn = document.getElementById("playSound");
+            const yesBtn = document.getElementById("yesButton");
+            const noBtn = document.getElementById("noButton");
+
+            if (e.key === " " && !playSoundBtn.disabled) {
+                e.preventDefault();
+                playSoundBtn.click();
+            } else if ((e.key === "y" || e.key === "Y") && !yesBtn.disabled) {
+                e.preventDefault();
+                yesBtn.click();
+            } else if ((e.key === "n" || e.key === "N") && !noBtn.disabled) {
+                e.preventDefault();
+                noBtn.click();
+            }
         });
 
         function downloadResults() {
