@@ -46,6 +46,7 @@
     }
 
     button.secondary { background: var(--btn-secondary); }
+    button:disabled { background: #b9bec2; color: #eee; box-shadow: none; opacity: 0.7; }
     button.small { width: 150px; min-height:48px; font-size:16px; }
     #choices { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
 
@@ -84,7 +85,7 @@
   <h2>Gaps-in-Noise Test (touch friendly)</h2>
   <h1>Instructions</h1>
   <p>In each trial, you will hear two intervals of white noise. One of the intervals will contain a brief silent gap. Your task is to identify which interval (first or second) contained the gap. If you are unsure, you can select "Unsure".</p>
-  <p>Press "Play Trial" to begin. After listening, select your answer. The gap duration will adjust based on your responses to find your threshold.</p>
+  <p>First, adjust the volume to a comfortable level and confirm the channel is correct. Then you'll complete 3 short practice trials (not scored) before the real test begins. The gap duration will adjust based on your responses, and your threshold is estimated from the staircase's reversal points.</p>
   <p>Try to minimize distractions and use headphones for the best experience. Test using one ear to replicate the conditions of the official GIN test.</p>
 
 
@@ -99,25 +100,77 @@
       </select>
     </div>
 
+    <div class="control-row">
+      <label class="control-label" for="volumeSlider">Volume</label>
+      <input type="range" id="volumeSlider" min="0" max="100" value="50" style="width: 260px;">
+    </div>
+    <button id="calNoiseButton" class="secondary">Play Calibration Noise</button>
+    <button id="calConfirmButton" class="secondary">Confirm Volume &amp; Channel OK</button>
+    <div id="calibrationStatus" aria-live="polite">Adjust the volume to a comfortable level, then confirm before starting the test.</div>
+
     <!-- start-gap selector (touch-friendly styled) -->
     <select id="startGapSelect" class="styled" aria-label="Starting gap (ms)"></select>
 
-    <button id="playBtn">Play Trial</button>
+    <button id="playBtn" disabled>Play Trial</button>
 
     <div id="choices" aria-hidden="true">
       <p style="width:100%;">Which interval had the gap?</p>
       <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">
-        <button id="choice1" class="secondary">First</button>
-        <button id="choice2" class="secondary">Second</button>
-        <button id="choiceUnsure" class="secondary">Unsure</button>
+        <button id="choice1" class="secondary" disabled>First</button>
+        <button id="choice2" class="secondary" disabled>Second</button>
+        <button id="choiceUnsure" class="secondary" disabled>Unsure</button>
       </div>
     </div>
 
     <div id="status" aria-live="polite"></div>
     <button id="exportBtn" class="secondary small">Export Results</button>
+    <button id="aboutBtn" class="secondary small" aria-haspopup="dialog">About This Procedure</button>
   </div>
 
   <canvas id="performanceChart" aria-label="performance chart"></canvas>
+
+  <div id="aboutOverlay" role="presentation" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1000;">
+      <div id="aboutDialog" role="dialog" aria-modal="true" aria-labelledby="aboutTitle"
+           style="background:#fff; color:#222; max-width:640px; margin:5vh auto; padding:24px 28px; border-radius:12px;
+                  max-height:85vh; overflow-y:auto; text-align:left; box-shadow:0 8px 30px rgba(0,0,0,0.3);">
+          <h2 id="aboutTitle" style="margin-top:0;">About This Procedure</h2>
+
+          <h3>Task &amp; stimulus</h3>
+          <ul>
+              <li>Each trial presents two 1-second broadband noise intervals, played back to back. Exactly one interval contains a brief silent gap; the other is continuous noise. Which interval (first or second) contains the gap is randomized each trial.</li>
+              <li>Noise is freshly generated per interval per trial, so no waveform repeats.</li>
+              <li>Gap onset/offset use a short (~5ms, or half the gap for very short gaps) linear fade rather than an instant cut, to avoid an audible "click" at the edges that could act as a cue independent of the gap itself.</li>
+              <li>The gap's position within its interval is randomized per trial (kept at least 60ms from the interval's start/end), rather than fixed at the interval's midpoint, so its timing can't be anticipated.</li>
+          </ul>
+
+          <h3>Channel routing (ear selection)</h3>
+          <ul>
+              <li>The Channel selector routes noise to Binaural (both ears), Left Ear Only, or Right Ear Only via a true stereo buffer — the non-selected ear receives silence, not just a quieter signal.</li>
+              <li>Changing the channel mid-session requires re-confirming calibration before the test can continue.</li>
+          </ul>
+
+          <h3>Volume calibration &amp; gating</h3>
+          <ul>
+              <li>Before any scored trial, you must play continuous calibration noise, adjust the volume slider to a comfortable level, and confirm it sounds correct for the selected channel.</li>
+              <li>Play Trial and the response buttons are disabled (gated) until calibration is confirmed.</li>
+              <li>This standardizes relative comfort and verifies correct ear routing — it does <em>not</em> measure absolute sound pressure level (dB SPL), which depends on your specific headphones/speakers and device volume.</li>
+          </ul>
+
+          <h3>Practice block</h3>
+          <ul>
+              <li>Immediately after calibration, 3 unscored practice trials run using an easy, large gap so you can get familiar with the two-interval task before anything counts.</li>
+          </ul>
+
+          <h3>Staircase &amp; threshold estimation</h3>
+          <ul>
+              <li>A 1-down/1-up staircase: a correct response shrinks the next gap (harder), an incorrect response grows it (easier); "Unsure" is treated as incorrect for staircase purposes.</li>
+              <li>The test stops after 5 reversals (points where the staircase's direction flips).</li>
+              <li>Your threshold is estimated as the mean gap duration at the last several reversals, rather than an average of recent trials regardless of direction — a more standard, less noisy estimator.</li>
+          </ul>
+
+          <button id="aboutCloseButton" class="secondary small" style="margin-top:8px;">Close</button>
+      </div>
+  </div>
 
   <script>
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -127,10 +180,26 @@
     let correctInterval = 1;
     let trialCount = 0;
     const results = [];
-    const reversals = [];
+    const reversals = []; // trial numbers, for chart plotting
+    const reversalGaps = []; // gap duration (ms) at each reversal, for thresholding
     let lastDirection = null;
     const maxReversals = 5;
+    const REVERSALS_FOR_THRESHOLD = 4;
     let earMode = 'binaural'; // Track ear selection
+
+    const masterGainNode = audioCtx.createGain();
+    masterGainNode.gain.value = 0.5;
+    masterGainNode.connect(audioCtx.destination);
+    let calibrationSource = null;
+    let calibrationConfirmed = false;
+
+    const RAMP_MS = 5; // fade duration at gap onset/offset, avoids audible clicks
+    const EDGE_MARGIN_MS = 60; // minimum distance of the gap from interval start/end
+
+    let inPractice = false;
+    let practiceRemaining = 0;
+    const PRACTICE_TRIAL_COUNT = 3;
+    const PRACTICE_EASY_GAP_MS = 20; // largest/easiest gap in gapOptions
 
     // UI elements
     const playBtn = document.getElementById('playBtn');
@@ -193,14 +262,34 @@
         }
       }
       
-      // Apply gap if specified
+      // Apply gap if specified: randomized position within the interval (kept
+      // clear of the edges), with a short ramp at onset/offset instead of an
+      // instant cut, to avoid an audible "click" that could act as a cue
+      // independent of the gap itself.
       if (gapMs > 0) {
+        const durationMs = durationSec * 1000;
+        const edgeMargin = Math.min(EDGE_MARGIN_MS, durationMs / 4);
+        const minStartMs = edgeMargin;
+        const maxStartMs = durationMs - edgeMargin - gapMs;
+        const gapStartMs = maxStartMs > minStartMs
+          ? minStartMs + Math.random() * (maxStartMs - minStartMs)
+          : durationMs / 2 - gapMs / 2; // fallback to center
+        const rampMs = Math.min(RAMP_MS, gapMs / 2);
+
+        const gapStart = Math.floor(sampleRate * (gapStartMs / 1000));
         const gapLen = Math.floor(sampleRate * (gapMs / 1000));
-        const gapStart = Math.floor(length / 2 - gapLen / 2);
         const gapEnd = Math.min(length, gapStart + gapLen);
+        const rampLen = Math.floor(sampleRate * (rampMs / 1000));
+
         for (let i = gapStart; i < gapEnd; i++) {
-          dataL[i] = 0;
-          dataR[i] = 0;
+          const distFromStart = i - gapStart;
+          const distFromEnd = gapEnd - 1 - i;
+          let envelope = 1.0;
+          if (distFromStart < rampLen) envelope = 1 - (distFromStart / rampLen);
+          else if (distFromEnd < rampLen) envelope = 1 - (distFromEnd / rampLen);
+          else envelope = 0;
+          dataL[i] *= envelope;
+          dataR[i] *= envelope;
         }
       }
       return buffer;
@@ -209,7 +298,7 @@
     function playBuffer(buffer, delay = 0) {
       const source = audioCtx.createBufferSource();
       source.buffer = buffer;
-      source.connect(audioCtx.destination);
+      source.connect(masterGainNode);
       source.start(audioCtx.currentTime + delay);
     }
 
@@ -247,7 +336,9 @@
     }
 
     function startTrial() {
-      if (reversals.length >= maxReversals) {
+      if (!calibrationConfirmed) return; // extra guard; controls are already disabled
+
+      if (!inPractice && reversals.length >= maxReversals) {
         status.textContent = "Test complete!";
         estimateThreshold();
         return;
@@ -258,12 +349,12 @@
         audioCtx.resume().catch(()=>{});
       }
 
-      status.textContent = "Playing…";
+      status.textContent = inPractice ? "Playing practice trial…" : "Playing…";
       choicesContainer.style.display = "none";
       choicesContainer.setAttribute('aria-hidden','true');
 
       correctInterval = Math.random() < 0.5 ? 1 : 2;
-      const gapMs = gapOptions[gapIndex];
+      const gapMs = inPractice ? PRACTICE_EASY_GAP_MS : gapOptions[gapIndex];
       const buffer1 = createNoiseBuffer(1.0, correctInterval === 1 ? gapMs : 0);
       const buffer2 = createNoiseBuffer(1.0, correctInterval === 2 ? gapMs : 0);
 
@@ -274,11 +365,34 @@
       setTimeout(() => {
         choicesContainer.style.display = "block";
         choicesContainer.setAttribute('aria-hidden','false');
-        status.textContent = "";
+        status.textContent = inPractice
+          ? `Practice trial ${PRACTICE_TRIAL_COUNT - practiceRemaining + 1} of ${PRACTICE_TRIAL_COUNT} (not scored).`
+          : "";
       }, 3200);
     }
 
+    function startPractice() {
+      inPractice = true;
+      practiceRemaining = PRACTICE_TRIAL_COUNT;
+      status.textContent = `Practice trial 1 of ${PRACTICE_TRIAL_COUNT} (not scored). Press Play Trial.`;
+    }
+
     function submitAnswer(choice) {
+      if (inPractice) {
+        const isCorrect = (choice === correctInterval);
+        practiceRemaining--;
+        const outcomeText = choice === 'unsure' ? "Marked as unsure." : (isCorrect ? "Correct!" : "Incorrect.");
+        if (practiceRemaining > 0) {
+          status.textContent = `${outcomeText} (Practice — not scored, ${practiceRemaining} more practice trial${practiceRemaining === 1 ? '' : 's'} left)`;
+        } else {
+          inPractice = false;
+          status.textContent = `${outcomeText} Practice complete — the real test begins now.`;
+        }
+        choicesContainer.style.display = "none";
+        choicesContainer.setAttribute('aria-hidden','true');
+        return;
+      }
+
       const gapMs = gapOptions[gapIndex];
       trialCount++;
       let isCorrect = null;
@@ -290,6 +404,7 @@
         const direction = 'up';
         if (lastDirection && direction !== lastDirection) {
           reversals.push(trialCount);
+          reversalGaps.push(gapMs);
           chart.data.datasets[3].data.push({ x: trialCount, y: gapMs });
         }
         lastDirection = direction;
@@ -306,6 +421,7 @@
         const direction = gapIndex > prevGapIndex ? 'up' : gapIndex < prevGapIndex ? 'down' : 'same';
         if (lastDirection && direction !== lastDirection && direction !== 'same') {
           reversals.push(trialCount);
+          reversalGaps.push(gapMs);
           chart.data.datasets[3].data.push({ x: trialCount, y: gapMs });
         }
         lastDirection = direction;
@@ -324,20 +440,27 @@
     }
 
     function estimateThreshold() {
-      const corrects = results.filter(r => r.correct === true).slice(-3);
-      if (corrects.length === 3) {
-        const avg = corrects.reduce((sum, r) => sum + r.gapMs, 0) / 3;
-        status.textContent += ` Estimated threshold: ${avg.toFixed(2)} ms`;
+      if (reversalGaps.length >= 2) {
+        const lastReversals = reversalGaps.slice(-REVERSALS_FOR_THRESHOLD);
+        const avg = lastReversals.reduce((sum, v) => sum + v, 0) / lastReversals.length;
+        status.textContent += ` Estimated threshold: ${avg.toFixed(2)} ms (mean of last ${lastReversals.length} reversals)`;
       } else {
-        status.textContent += ' Not enough correct trials to estimate threshold.';
+        status.textContent += ' Not enough reversals to estimate threshold.';
       }
     }
 
     function exportResults() {
-      let csv = "Trial,Gap(ms),Response\n";
+      let csv = "Trial,Gap(ms),Response,Channel,Volume (%)\n";
+      const volumePercent = document.getElementById('volumeSlider').value;
       results.forEach(r => {
-        csv += `${r.trial},${r.gapMs},${r.correct}\n`;
+        csv += `${r.trial},${r.gapMs},${r.correct},${earMode},${volumePercent}\n`;
       });
+      csv += `\nReversals (ms),${reversalGaps.join(' ')}\n`;
+      if (reversalGaps.length >= 2) {
+        const lastReversals = reversalGaps.slice(-REVERSALS_FOR_THRESHOLD);
+        const avg = lastReversals.reduce((sum, v) => sum + v, 0) / lastReversals.length;
+        csv += `Estimated Threshold (ms),${avg.toFixed(2)},based on last ${lastReversals.length} reversals\n`;
+      }
       const blob = new Blob([csv], { type: "text/csv" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -374,16 +497,79 @@
     })();
 
     // Set up ear mode selector
+    const calibrationStatusEl = document.getElementById('calibrationStatus');
+    function setCalibrationConfirmed(value) {
+      calibrationConfirmed = value;
+      playBtn.disabled = !value;
+      choice1.disabled = !value;
+      choice2.disabled = !value;
+      choiceUnsure.disabled = !value;
+    }
+
     (function initEarSelect(){
       const sel = document.getElementById('earSelect');
       sel.addEventListener('change', (e) => {
         earMode = e.target.value;
+        setCalibrationConfirmed(false);
+        calibrationStatusEl.textContent = 'Channel changed — please reconfirm volume and channel before continuing.';
       });
     })();
 
+    // Volume slider: live-update master gain
+    const volumeSlider = document.getElementById('volumeSlider');
+    volumeSlider.addEventListener('input', (e) => {
+      masterGainNode.gain.value = e.target.value / 100;
+    });
+
+    // Calibration noise: continuous gapless noise through the selected channel
+    const calNoiseButton = document.getElementById('calNoiseButton');
+    calNoiseButton.addEventListener('click', async () => {
+      if (audioCtx.state === 'suspended') await audioCtx.resume().catch(() => {});
+      if (calibrationSource) {
+        calibrationSource.stop();
+        calibrationSource = null;
+        calNoiseButton.textContent = 'Play Calibration Noise';
+        return;
+      }
+      const buffer = createNoiseBuffer(2); // 2s loopable buffer, no gap
+      const source = audioCtx.createBufferSource();
+      source.buffer = buffer;
+      source.loop = true;
+      source.connect(masterGainNode);
+      source.start();
+      calibrationSource = source;
+      calNoiseButton.textContent = 'Stop Calibration Noise';
+    });
+
+    // Confirm calibration: gates the main test controls, then starts the practice block
+    document.getElementById('calConfirmButton').addEventListener('click', () => {
+      if (calibrationSource) {
+        calibrationSource.stop();
+        calibrationSource = null;
+        calNoiseButton.textContent = 'Play Calibration Noise';
+      }
+      setCalibrationConfirmed(true);
+      calibrationStatusEl.textContent =
+        `Calibration confirmed (Volume: ${volumeSlider.value}%, Channel: ${earMode}). A short practice round starts now.`;
+      startPractice();
+    });
+
+    // About dialog
+    const aboutOverlay = document.getElementById('aboutOverlay');
+    function openAbout() { aboutOverlay.style.display = 'block'; }
+    function closeAbout() { aboutOverlay.style.display = 'none'; }
+    document.getElementById('aboutBtn').addEventListener('click', openAbout);
+    document.getElementById('aboutCloseButton').addEventListener('click', closeAbout);
+    aboutOverlay.addEventListener('click', (e) => {
+      if (e.target === aboutOverlay) closeAbout();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && aboutOverlay.style.display === 'block') closeAbout();
+    });
+
     // also allow keyboard activation
     [playBtn, choice1, choice2, choiceUnsure, exportBtn].forEach(el=>{
-      el.addEventListener('keydown', (e)=> { if(e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.click(); }}); 
+      el.addEventListener('keydown', (e)=> { if(e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.click(); }});
     });
 
     // keep chart height reasonable on load
