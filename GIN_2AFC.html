@@ -11,14 +11,19 @@
       --btn-secondary: #6c757d;
       --btn-radius: 12px;
       --touch-min: 56px;
+      --card-bg: #f7f8fa;
+      --card-border: #e2e5ea;
+      --text-color: #1f2430;
+      --muted: #5b6472;
     }
 
     html,body { height:100%; }
-    body { 
-      font-family: Arial, sans-serif; 
-      text-align: center; 
-      margin: 12px; 
-      padding-bottom: 24px;
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 28px 16px 48px;
+      background: #ffffff;
+      color: var(--text-color);
       -webkit-font-smoothing:antialiased;
       -webkit-touch-callout: none;
       -webkit-user-select: none;
@@ -27,7 +32,24 @@
       -webkit-tap-highlight-color: transparent;
     }
 
-    h1 { font-size: 1.4rem; margin-bottom: 12px; }
+    .page { max-width: 720px; margin: 0 auto; }
+
+    .page-header { text-align: center; margin-bottom: 28px; }
+    .page-header h1 { font-size: 1.6rem; margin: 0 0 6px; }
+    .page-header .subtitle { margin: 0; color: var(--muted); font-size: 1rem; font-weight: 600; }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 22px 24px;
+      margin-bottom: 20px;
+    }
+
+    .card h2 { margin: 0 0 12px; font-size: 1.05rem; text-align: center; }
+
+    .card p { text-align: left; line-height: 1.55; margin: 0 0 10px; }
+    .card p:last-child { margin-bottom: 0; }
 
     .controls { display:flex; flex-direction:column; align-items:center; gap:12px; margin:0 auto; max-width:420px; }
 
@@ -48,7 +70,9 @@
     button.secondary { background: var(--btn-secondary); }
     button:disabled { background: #b9bec2; color: #eee; box-shadow: none; opacity: 0.7; }
     button.small { width: 150px; min-height:48px; font-size:16px; }
-    #choices { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+    #choices { display:flex; flex-direction: column; align-items: center; gap:10px; }
+    #choices p { text-align: center; margin: 0; font-weight: 600; }
+    #choices .choice-buttons { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
 
     /* styled select to match touch-friendly buttons */
     select.styled {
@@ -68,65 +92,87 @@
       text-align-last: center;
     }
 
-    #status { margin-top: 12px; font-weight: 600; min-height: 1.2em; }
-    canvas { max-width: 900px; width: 100%; margin: 18px auto; display:block; }
-    
-    .control-row { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-bottom: 12px; }
+    #status { margin-top: 12px; font-weight: 600; min-height: 1.2em; text-align: center; }
+    #calibrationStatus { text-align: center; color: var(--muted); font-size: 0.95rem; }
+    canvas { max-width: 100%; width: 100%; display:block; }
+
+    .control-row { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-bottom: 4px; }
     .control-label { font-weight: 600; font-size: 16px; }
+    .card-divider { border: none; border-top: 1px solid var(--card-border); margin: 16px 0; }
 
     @media (max-width:600px){
-      h1 { font-size: 1.2rem; }
+      .page-header h1 { font-size: 1.3rem; }
+      .card { padding: 18px 16px; }
       button { font-size: 20px; min-height: 64px; }
       .controls { gap:14px; }
     }
   </style>
 </head>
 <body>
-  <h2>Gaps-in-Noise: Two-Interval Forced-Choice Test (touch friendly)</h2>
-  <h1>Instructions</h1>
-  <p>In each trial, you will hear two intervals of white noise. One of the intervals will contain a brief silent gap. Your task is to identify which interval (first or second) contained the gap. Even if you're not sure, please make your best guess — every trial needs a First or Second answer for the results to be valid.</p>
-  <p>First, adjust the volume to a comfortable level and confirm the channel is correct. Then you'll complete 3 short practice trials (not scored) before the real test begins. The gap duration will adjust based on your responses, and your threshold is estimated from the staircase's reversal points.</p>
-  <p>Try to minimize distractions and use headphones for the best experience. This is a two-interval forced-choice task, distinct in design from the single-interval "official" clinical GIN test.</p>
+  <div class="page">
+    <header class="page-header">
+      <h1>Gaps-in-Noise Test</h1>
+      <p class="subtitle">Two-Interval Forced-Choice Version (touch friendly)</p>
+    </header>
 
+    <section class="card" aria-label="Instructions">
+      <h2>Instructions</h2>
+      <p>In each trial, you will hear two intervals of white noise. One of the intervals will contain a brief silent gap. Your task is to identify which interval (first or second) contained the gap. Even if you're not sure, please make your best guess — every trial needs a First or Second answer for the results to be valid.</p>
+      <p>First, adjust the volume to a comfortable level and confirm the channel is correct. Then you'll complete 3 short practice trials (not scored) before the real test begins. The gap duration will adjust based on your responses, and your threshold is estimated from the staircase's reversal points.</p>
+      <p>Try to minimize distractions and use headphones for the best experience. This is a two-interval forced-choice task, distinct in design from the single-interval "official" clinical GIN test.</p>
+    </section>
 
-  <div class="controls" role="group" aria-label="Test controls">
-    <!-- ear/channel selector -->
-    <div class="control-row">
-      <label class="control-label" for="earSelect">Channel:</label>
-      <select id="earSelect" class="styled" aria-label="Audio channel selection">
-        <option value="binaural">Binaural</option>
-        <option value="left">Left Ear Only</option>
-        <option value="right">Right Ear Only</option>
-      </select>
-    </div>
+    <section class="card" aria-label="Setup and calibration">
+      <h2>Setup &amp; Calibration</h2>
+      <div class="controls" role="group" aria-label="Calibration controls">
+        <div class="control-row">
+          <label class="control-label" for="earSelect">Channel:</label>
+          <select id="earSelect" class="styled" aria-label="Audio channel selection">
+            <option value="binaural">Binaural</option>
+            <option value="left">Left Ear Only</option>
+            <option value="right">Right Ear Only</option>
+          </select>
+        </div>
 
-    <div class="control-row">
-      <label class="control-label" for="volumeSlider">Volume</label>
-      <input type="range" id="volumeSlider" min="0" max="100" value="50" style="width: 260px;">
-    </div>
-    <button id="calNoiseButton" class="secondary">Play Calibration Noise</button>
-    <button id="calConfirmButton" class="secondary">Confirm Volume &amp; Channel OK</button>
-    <div id="calibrationStatus" aria-live="polite">Adjust the volume to a comfortable level, then confirm before starting the test.</div>
-
-    <!-- start-gap selector (touch-friendly styled) -->
-    <select id="startGapSelect" class="styled" aria-label="Starting gap (ms)"></select>
-
-    <button id="playBtn" disabled>Play Trial</button>
-
-    <div id="choices" aria-hidden="true">
-      <p style="width:100%;">Which interval had the gap?</p>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">
-        <button id="choice1" class="secondary" disabled>First</button>
-        <button id="choice2" class="secondary" disabled>Second</button>
+        <div class="control-row">
+          <label class="control-label" for="volumeSlider">Volume</label>
+          <input type="range" id="volumeSlider" min="0" max="100" value="50" style="width: 260px;">
+        </div>
+        <button id="calNoiseButton" class="secondary">Play Calibration Noise</button>
+        <button id="calConfirmButton" class="secondary">Confirm Volume &amp; Channel OK</button>
+        <div id="calibrationStatus" aria-live="polite">Adjust the volume to a comfortable level, then confirm before starting the test.</div>
       </div>
-    </div>
+    </section>
 
-    <div id="status" aria-live="polite"></div>
-    <button id="exportBtn" class="secondary small">Export Results</button>
-    <button id="aboutBtn" class="secondary small" aria-haspopup="dialog">About This Procedure</button>
+    <section class="card" aria-label="Run the test">
+      <h2>Run the Test</h2>
+      <div class="controls" role="group" aria-label="Test controls">
+        <select id="startGapSelect" class="styled" aria-label="Starting gap (ms)"></select>
+
+        <button id="playBtn" disabled>Play Trial</button>
+
+        <div id="choices" aria-hidden="true">
+          <p>Which interval had the gap?</p>
+          <div class="choice-buttons">
+            <button id="choice1" class="secondary" disabled>First</button>
+            <button id="choice2" class="secondary" disabled>Second</button>
+          </div>
+        </div>
+
+        <div id="status" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <section class="card" aria-label="Results">
+      <h2>Results</h2>
+      <div class="controls">
+        <button id="exportBtn" class="secondary small">Export Results</button>
+        <button id="aboutBtn" class="secondary small" aria-haspopup="dialog">About This Procedure</button>
+      </div>
+      <hr class="card-divider">
+      <canvas id="performanceChart" aria-label="performance chart"></canvas>
+    </section>
   </div>
-
-  <canvas id="performanceChart" aria-label="performance chart"></canvas>
 
   <div id="aboutOverlay" role="presentation" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1000;">
       <div id="aboutDialog" role="dialog" aria-modal="true" aria-labelledby="aboutTitle"
