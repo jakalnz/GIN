@@ -5,11 +5,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>GIN Behavioral Test -V3</title>
     <style>
-        body { 
-            font-family: Arial, sans-serif; 
-            text-align: center; 
-            margin: 18px; 
-            padding-top: 12px;
+        :root{
+            --btn-bg: #0078D4;
+            --btn-secondary: #6c757d;
+            --btn-warn: #d9534f;
+            --btn-radius: 10px;
+            --touch-min: 56px;
+            --card-bg: #f7f8fa;
+            --card-border: #e2e5ea;
+            --text-color: #1f2430;
+            --muted: #5b6472;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 28px 16px 48px;
+            background: #ffffff;
+            color: var(--text-color);
             -webkit-font-smoothing:antialiased;
             -webkit-touch-callout: none;
             -webkit-user-select: none;
@@ -17,24 +30,44 @@
             user-select: none;
         }
 
+        .page { max-width: 720px; margin: 0 auto; }
+
+        .page-header { text-align: center; margin-bottom: 28px; }
+        .page-header h1 { font-size: 1.6rem; margin: 0 0 6px; }
+        .page-header .subtitle { margin: 0; color: var(--muted); font-size: 1rem; font-weight: 600; }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            padding: 22px 24px;
+            margin-bottom: 20px;
+        }
+
+        .card h2 { margin: 0 0 12px; font-size: 1.05rem; text-align: center; }
+        .card p { text-align: left; line-height: 1.55; margin: 0 0 10px; }
+        .card p:last-child { margin-bottom: 0; }
+
         /* Larger, touch-friendly buttons and responsive layout */
         .controls {
             display: flex;
+            flex-direction: column;
+            align-items: center;
             flex-wrap: wrap;
-            justify-content: center;
             gap: 12px;
-            margin-bottom: 6px;
+            margin: 0 auto;
+            max-width: 420px;
         }
 
         button {
+            width: 320px;
+            max-width: 92%;
             padding: 14px 20px;
-            margin: 6px;
             font-size: 18px;
-            min-height: 56px;           /* recommended touch target */
-            min-width: 140px;
-            border-radius: 10px;
+            min-height: var(--touch-min);
+            border-radius: var(--btn-radius);
             border: none;
-            background: #0078D4;
+            background: var(--btn-bg);
             color: white;
             touch-action: manipulation;
             -webkit-tap-highlight-color: transparent;
@@ -42,75 +75,101 @@
         }
 
         button:active { transform: scale(0.995); }
-        button.secondary { background: #6c757d; }
-        button.warn { background: #d9534f; }
+        button.secondary { background: var(--btn-secondary); }
+        button.warn { background: var(--btn-warn); }
+        button:disabled { background: #b9bec2; color: #eee; box-shadow: none; opacity: 0.7; }
 
         select.styled {
             -webkit-appearance: none;
             -moz-appearance: none;
             appearance: none;
+            width: 320px;
+            max-width: 92%;
             padding: 12px 16px;
             font-size: 16px;
             min-height: 48px;
-            min-width: 200px;
-            max-width: 92%;
-            border-radius: 10px;
+            border-radius: var(--btn-radius);
             border: none;
-            background: #6c757d;
+            background: var(--btn-secondary);
             color: white;
             box-shadow: 0 2px 6px rgba(0,0,0,0.14);
             text-align-last: center;
             touch-action: manipulation;
         }
 
-        .control-row { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 10px 0; }
+        .control-row { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-bottom: 4px; }
         .control-label { font-weight: 600; font-size: 16px; }
 
-        #feedback { margin-top: 18px; font-size: 18px; word-break: break-word; padding: 8px; }
-        footer { font-size: 15px; margin-top: 18px; line-height: 1.3; }
+        #trialsRemaining { text-align: center; font-weight: 600; margin-bottom: 8px; }
+        #feedback { text-align: center; font-size: 18px; word-break: break-word; white-space: pre-line; }
+        #calibrationStatus { text-align: center; color: var(--muted); font-size: 0.95rem; }
 
         /* Mobile: full-width-ish buttons */
         @media (max-width: 600px) {
-            button { width: 90%; max-width: 420px; font-size: 20px; }
-            .controls { gap: 10px; }
-            body { margin: 8px; }
-            footer { font-size: 14px; padding-bottom: 12px; }
+            .page-header h1 { font-size: 1.3rem; }
+            .card { padding: 18px 16px; }
+            button { font-size: 20px; min-height: 64px; }
+            .controls { gap: 14px; }
         }
     </style>
 </head>
 <body>
-    <h1>Gaps-in-Noise (GIN) Behavioral Test v3</h1>
+  <div class="page">
+    <header class="page-header">
+        <h1>Gaps-in-Noise (GIN) Behavioral Test</h1>
+        <p class="subtitle">v3 — Single-Interval Staircase Method (touch friendly)</p>
+    </header>
 
-    <!-- buttons grouped for better responsive layout -->
-    <div class="controls" role="group" aria-label="Test controls">
-        <div class="control-row">
-            <label class="control-label" for="earSelect">Channel:</label>
-            <select id="earSelect" class="styled" aria-label="Audio channel selection">
-                <option value="binaural">Binaural</option>
-                <option value="left">Left Ear Only</option>
-                <option value="right">Right Ear Only</option>
-            </select>
+    <section class="card" aria-label="Instructions">
+        <h2>Instructions</h2>
+        <p>You will first complete 3 short practice trials (not scored) to get familiar with the task, then the real test begins.</p>
+        <p>You will be presented with a 1000ms long sound clip when you press "Play Sound" (toggleable to 500ms). Your task is to determine whether there is a gap in the sound. If you hear a gap, click "Yes". If you don't hear a gap, click "No". The test will continue for 20 trials. Your threshold is estimated from the staircase's reversal points (where your responses flip from correct to incorrect or vice versa). If you provide a false positive the test will extend by 5 trials.</p>
+        <p>Note: the volume calibration step sets a comfortable, consistent listening level and confirms channel routing — it does not measure absolute sound pressure level (dB SPL), which depends on your headphones/speakers.</p>
+    </section>
+
+    <section class="card" aria-label="Setup and calibration">
+        <h2>Setup &amp; Calibration</h2>
+        <div class="controls" role="group" aria-label="Calibration controls">
+            <div class="control-row">
+                <label class="control-label" for="earSelect">Channel:</label>
+                <select id="earSelect" class="styled" aria-label="Audio channel selection">
+                    <option value="binaural">Binaural</option>
+                    <option value="left">Left Ear Only</option>
+                    <option value="right">Right Ear Only</option>
+                </select>
+            </div>
+
+            <div class="control-row">
+                <label class="control-label" for="volumeSlider">Volume</label>
+                <input type="range" id="volumeSlider" min="0" max="100" value="50" style="width: 260px;">
+            </div>
+            <button id="calNoiseButton" class="secondary">Play Calibration Noise</button>
+            <button id="calConfirmButton" class="secondary">Confirm Volume &amp; Channel OK</button>
+            <div id="calibrationStatus" aria-live="polite">Adjust the volume to a comfortable level, then confirm before starting the test.</div>
         </div>
-    </div>
+    </section>
 
-    <div class="controls" id="calibrationControls" role="group" aria-label="Volume calibration">
-        <div class="control-row">
-            <label class="control-label" for="volumeSlider">Volume</label>
-            <input type="range" id="volumeSlider" min="0" max="100" value="50" style="width: 220px;">
+    <section class="card" aria-label="Run the test">
+        <h2>Run the Test</h2>
+        <div class="controls" id="testControls" role="group" aria-label="Test controls">
+            <div id="durationAnchor"></div>
+            <button id="playSound" disabled>Play Sound</button>
+            <button id="yesButton" class="secondary" disabled>Yes, I heard a gap</button>
+            <button id="noButton" class="secondary" disabled>No, I didn't hear a gap</button>
+            <div id="trialsRemaining"></div>
+            <div id="feedback" aria-live="polite"></div>
         </div>
-        <button id="calNoiseButton" class="secondary">Play Calibration Noise</button>
-        <button id="calConfirmButton" class="secondary">Confirm Volume &amp; Channel OK</button>
-    </div>
-    <div id="calibrationStatus" aria-live="polite">Adjust the volume to a comfortable level, then confirm before starting the test.</div>
+    </section>
 
-    <div class="controls" id="testControls" role="group" aria-label="Test controls">
-        <button id="playSound" disabled>Play Sound</button>
-        <button id="yesButton" class="secondary" disabled>Yes, I heard a gap</button>
-        <button id="noButton" class="secondary" disabled>No, I didn't hear a gap</button>
-        <button id="resetButton" class="warn">Reset</button>
-        <button id="downloadButton" class="secondary">Download Results</button>
-        <button id="aboutButton" class="secondary" aria-haspopup="dialog">About This Procedure</button>
-    </div>
+    <section class="card" aria-label="Results">
+        <h2>Results</h2>
+        <div class="controls">
+            <button id="resetButton" class="warn">Reset</button>
+            <button id="downloadButton" class="secondary">Download Results</button>
+            <button id="aboutButton" class="secondary" aria-haspopup="dialog">About This Procedure</button>
+        </div>
+    </section>
+  </div>
 
     <div id="aboutOverlay" role="presentation" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1000;">
         <div id="aboutDialog" role="dialog" aria-modal="true" aria-labelledby="aboutTitle"
@@ -159,17 +218,6 @@
             <button id="aboutCloseButton" class="secondary" style="margin-top:8px;">Close</button>
         </div>
     </div>
-
-    <div id="feedback" aria-live="polite"></div>
-    <footer> <br><br>This is a simple GIN thresholding test (Staircase Method): <br>
-        You will first complete 3 short practice trials (not scored) to get familiar with the task, then the real test begins.<br>
-        You will be presented with a 1000ms long sound clip when you press [Play Sound] (toggleable to 500ms).<br> Your task is to determine whether there is a gap in the sound. If you hear a gap, click the 'Yes' button. If you don't hear a gap, click the 'No' button. The test will continue for 20 trials. <br>Your threshold is estimated from the staircase's reversal points (where your responses flip from correct to incorrect or vice versa). <br> If you provide a false positive the test will extend by 5 trials!
-        <br><br>
-        Note: the volume calibration step sets a comfortable, consistent listening level and confirms channel routing — it does not measure absolute sound pressure level (dB SPL), which depends on your headphones/speakers.
-        <br>
-        <br>
-
-    </footer>
 
     <script>
         let audioContext = null;
@@ -257,8 +305,8 @@
             durationButton.innerText = 'Duration 1000ms';
             durationButton.style.margin = '10px';
             durationButton.className = 'secondary';
-            // place after controls
-            document.querySelector('.controls').insertAdjacentElement('afterend', durationButton);
+            // place at the reserved anchor within the "Run the Test" card
+            document.getElementById('durationAnchor').insertAdjacentElement('afterend', durationButton);
             // show initial feedback
             document.getElementById('feedback').innerText = `Sound Duration: ${soundDuration * 1000}ms, Gap at: ${gapStartTime * 1000}ms`;  
 
@@ -396,10 +444,7 @@
         let currentGapIndex = 5;  // Index 5 corresponds to 10ms
 
         let maxTrials = 20;
-        let trialsDisplay = document.createElement('div');
-        trialsDisplay.id = 'trialsRemaining';
-        trialsDisplay.style.margin = '20px';
-        document.body.insertBefore(trialsDisplay, document.getElementById('feedback'));
+        const trialsDisplay = document.getElementById('trialsRemaining');
 
         function updateTrialsDisplay() {
             trialsDisplay.innerText = `Trials remaining: ${maxTrials - totalTrials}`;
