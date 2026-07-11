@@ -69,6 +69,7 @@
 
     button.secondary { background: var(--btn-secondary); }
     button:disabled { background: #b9bec2; color: #eee; box-shadow: none; opacity: 0.7; }
+    select.styled:disabled { background: #b9bec2; color: #eee; box-shadow: none; opacity: 0.7; }
     button.small { width: 150px; min-height:48px; font-size:16px; }
     #choices { display:flex; flex-direction: column; align-items: center; gap:10px; }
     #choices p { text-align: center; margin: 0; font-weight: 600; }
@@ -94,7 +95,11 @@
 
     #status { margin-top: 12px; font-weight: 600; min-height: 1.2em; text-align: center; }
     #calibrationStatus { text-align: center; color: var(--muted); font-size: 0.95rem; }
-    canvas { max-width: 100%; width: 100%; display:block; }
+    /* Chart.js with maintainAspectRatio:false needs an explicitly-sized,
+       non-auto-height parent, or the canvas and its container can grow
+       each other in a feedback loop. This wrapper provides that fixed height. */
+    .chart-wrap { position: relative; width: 100%; height: 320px; }
+    .chart-wrap canvas { width: 100% !important; height: 100% !important; }
 
     .control-row { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-bottom: 4px; }
     .control-label { font-weight: 600; font-size: 16px; }
@@ -139,6 +144,12 @@
           <input type="range" id="volumeSlider" min="0" max="100" value="50" style="width: 260px;">
         </div>
         <button id="calNoiseButton" class="secondary">Play Calibration Noise</button>
+
+        <div class="control-row">
+          <label class="control-label" for="startGapSelect">Starting gap:</label>
+          <select id="startGapSelect" class="styled" aria-label="Starting gap (ms)"></select>
+        </div>
+
         <button id="calConfirmButton" class="secondary">Confirm Volume &amp; Channel OK</button>
         <div id="calibrationStatus" aria-live="polite">Adjust the volume to a comfortable level, then confirm before starting the test.</div>
       </div>
@@ -147,8 +158,6 @@
     <section class="card" aria-label="Run the test">
       <h2>Run the Test</h2>
       <div class="controls" role="group" aria-label="Test controls">
-        <select id="startGapSelect" class="styled" aria-label="Starting gap (ms)"></select>
-
         <button id="playBtn" disabled>Play Trial</button>
 
         <div id="choices" aria-hidden="true">
@@ -170,7 +179,9 @@
         <button id="aboutBtn" class="secondary small" aria-haspopup="dialog">About This Procedure</button>
       </div>
       <hr class="card-divider">
-      <canvas id="performanceChart" aria-label="performance chart"></canvas>
+      <div class="chart-wrap">
+        <canvas id="performanceChart" aria-label="performance chart"></canvas>
+      </div>
     </section>
   </div>
 
@@ -210,8 +221,8 @@
           <h3>Staircase &amp; threshold estimation</h3>
           <ul>
               <li>A 1-down/1-up staircase: a correct response shrinks the next gap (harder), an incorrect response (including a wrong guess) grows it (easier).</li>
-              <li>The test stops after 5 reversals (points where the staircase's direction flips).</li>
-              <li>Your threshold is estimated as the mean gap duration at the last several reversals, rather than an average of recent trials regardless of direction — a more standard, less noisy estimator.</li>
+              <li>The test stops after 8 reversals (points where the staircase's direction flips).</li>
+              <li>Your threshold is estimated as the mean gap duration at the last 6 reversals — the first 2 are discarded, since they reflect the staircase still settling from its starting point rather than steady-state performance.</li>
           </ul>
 
           <button id="aboutCloseButton" class="secondary small" style="margin-top:8px;">Close</button>
@@ -229,8 +240,9 @@
     const reversals = []; // trial numbers, for chart plotting
     const reversalGaps = []; // gap duration (ms) at each reversal, for thresholding
     let lastDirection = null;
-    const maxReversals = 5;
-    const REVERSALS_FOR_THRESHOLD = 4;
+    const maxReversals = 8;
+    const DISCARD_FIRST_REVERSALS = 2; // early reversals reflect the staircase still settling, not steady-state
+    const REVERSALS_FOR_THRESHOLD = 6;
     let earMode = 'binaural'; // Track ear selection
 
     const masterGainNode = audioCtx.createGain();
@@ -471,11 +483,21 @@
       }
     }
 
+    // Discard the first couple of reversals (the staircase is still settling
+    // in from its starting gap) and average the rest, capped at
+    // REVERSALS_FOR_THRESHOLD, for a more stable steady-state estimate.
+    function computeThreshold() {
+      const usable = reversalGaps.slice(DISCARD_FIRST_REVERSALS);
+      if (usable.length < 2) return null;
+      const used = usable.slice(-REVERSALS_FOR_THRESHOLD);
+      const avg = used.reduce((sum, v) => sum + v, 0) / used.length;
+      return { avg, count: used.length };
+    }
+
     function estimateThreshold() {
-      if (reversalGaps.length >= 2) {
-        const lastReversals = reversalGaps.slice(-REVERSALS_FOR_THRESHOLD);
-        const avg = lastReversals.reduce((sum, v) => sum + v, 0) / lastReversals.length;
-        status.textContent += ` Estimated threshold: ${avg.toFixed(2)} ms (mean of last ${lastReversals.length} reversals)`;
+      const result = computeThreshold();
+      if (result) {
+        status.textContent += ` Estimated threshold: ${result.avg.toFixed(2)} ms (mean of last ${result.count} reversals, after discarding the first ${DISCARD_FIRST_REVERSALS})`;
       } else {
         status.textContent += ' Not enough reversals to estimate threshold.';
       }
@@ -488,10 +510,9 @@
         csv += `${r.trial},${r.gapMs},${r.correct},${earMode},${volumePercent}\n`;
       });
       csv += `\nReversals (ms),${reversalGaps.join(' ')}\n`;
-      if (reversalGaps.length >= 2) {
-        const lastReversals = reversalGaps.slice(-REVERSALS_FOR_THRESHOLD);
-        const avg = lastReversals.reduce((sum, v) => sum + v, 0) / lastReversals.length;
-        csv += `Estimated Threshold (ms),${avg.toFixed(2)},based on last ${lastReversals.length} reversals\n`;
+      const result = computeThreshold();
+      if (result) {
+        csv += `Estimated Threshold (ms),${result.avg.toFixed(2)},based on last ${result.count} reversals (first ${DISCARD_FIRST_REVERSALS} discarded)\n`;
       }
       const blob = new Blob([csv], { type: "text/csv" });
       const url = URL.createObjectURL(blob);
@@ -534,6 +555,10 @@
       playBtn.disabled = !value;
       choice1.disabled = !value;
       choice2.disabled = !value;
+      // Starting gap is a one-time setup choice, not a per-trial control —
+      // lock it once the test is underway so it can't be changed mid-run
+      // (which would silently reset the staircase's current position).
+      document.getElementById('startGapSelect').disabled = value;
     }
 
     (function initEarSelect(){
@@ -602,8 +627,24 @@
       el.addEventListener('keydown', (e)=> { if(e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.click(); }});
     });
 
-    // keep chart height reasonable on load
-    document.getElementById('performanceChart').style.height = '320px';
+    // Desktop keyboard shortcuts: 1/2 pick First/Second, Space plays the trial.
+    // Ignored while typing into a form control (slider/select) so those keep
+    // their native keyboard behavior (arrow keys, space-to-open, etc).
+    document.addEventListener('keydown', (e) => {
+      const tag = document.activeElement && document.activeElement.tagName;
+      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+
+      if (e.key === ' ' && !playBtn.disabled) {
+        e.preventDefault();
+        playBtn.click();
+      } else if (e.key === '1' && !choice1.disabled && choicesContainer.getAttribute('aria-hidden') === 'false') {
+        e.preventDefault();
+        choice1.click();
+      } else if (e.key === '2' && !choice2.disabled && choicesContainer.getAttribute('aria-hidden') === 'false') {
+        e.preventDefault();
+        choice2.click();
+      }
+    });
   </script>
 </body>
 </html>
