@@ -84,9 +84,9 @@
 <body>
   <h2>Gaps-in-Noise Test (touch friendly)</h2>
   <h1>Instructions</h1>
-  <p>In each trial, you will hear two intervals of white noise. One of the intervals will contain a brief silent gap. Your task is to identify which interval (first or second) contained the gap. If you are unsure, you can select "Unsure".</p>
+  <p>In each trial, you will hear two intervals of white noise. One of the intervals will contain a brief silent gap. Your task is to identify which interval (first or second) contained the gap. Even if you're not sure, please make your best guess — every trial needs a First or Second answer for the results to be valid.</p>
   <p>First, adjust the volume to a comfortable level and confirm the channel is correct. Then you'll complete 3 short practice trials (not scored) before the real test begins. The gap duration will adjust based on your responses, and your threshold is estimated from the staircase's reversal points.</p>
-  <p>Try to minimize distractions and use headphones for the best experience. Test using one ear to replicate the conditions of the official GIN test.</p>
+  <p>Try to minimize distractions and use headphones for the best experience. This is a two-interval forced-choice task, distinct in design from the single-interval "official" clinical GIN test.</p>
 
 
   <div class="controls" role="group" aria-label="Test controls">
@@ -118,7 +118,6 @@
       <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">
         <button id="choice1" class="secondary" disabled>First</button>
         <button id="choice2" class="secondary" disabled>Second</button>
-        <button id="choiceUnsure" class="secondary" disabled>Unsure</button>
       </div>
     </div>
 
@@ -138,6 +137,7 @@
           <h3>Task &amp; stimulus</h3>
           <ul>
               <li>Each trial presents two 1-second broadband noise intervals, played back to back. Exactly one interval contains a brief silent gap; the other is continuous noise. Which interval (first or second) contains the gap is randomized each trial.</li>
+              <li>This is a forced-choice task: you must pick First or Second every trial, even if you're not sure. Forcing a guess (rather than offering an "unsure" option) is what makes this design bias-free — it removes the effect of individual differences in willingness to commit to an answer, so the measured threshold reflects genuine sensitivity rather than response caution.</li>
               <li>Noise is freshly generated per interval per trial, so no waveform repeats.</li>
               <li>Gap onset/offset use a short (~5ms, or half the gap for very short gaps) linear fade rather than an instant cut, to avoid an audible "click" at the edges that could act as a cue independent of the gap itself.</li>
               <li>The gap's position within its interval is randomized per trial (kept at least 60ms from the interval's start/end), rather than fixed at the interval's midpoint, so its timing can't be anticipated.</li>
@@ -163,7 +163,7 @@
 
           <h3>Staircase &amp; threshold estimation</h3>
           <ul>
-              <li>A 1-down/1-up staircase: a correct response shrinks the next gap (harder), an incorrect response grows it (easier); "Unsure" is treated as incorrect for staircase purposes.</li>
+              <li>A 1-down/1-up staircase: a correct response shrinks the next gap (harder), an incorrect response (including a wrong guess) grows it (easier).</li>
               <li>The test stops after 5 reversals (points where the staircase's direction flips).</li>
               <li>Your threshold is estimated as the mean gap duration at the last several reversals, rather than an average of recent trials regardless of direction — a more standard, less noisy estimator.</li>
           </ul>
@@ -205,7 +205,6 @@
     const playBtn = document.getElementById('playBtn');
     const choice1 = document.getElementById('choice1');
     const choice2 = document.getElementById('choice2');
-    const choiceUnsure = document.getElementById('choiceUnsure');
     const choicesContainer = document.getElementById('choices');
     const status = document.getElementById('status');
     const exportBtn = document.getElementById('exportBtn');
@@ -218,7 +217,6 @@
         datasets: [
           { label: 'Correct', data: [], backgroundColor: 'green' },
           { label: 'Incorrect', data: [], backgroundColor: 'red' },
-          { label: 'Unsure', data: [], backgroundColor: 'gold' },
           {
             label: 'Reversal',
             data: [],
@@ -381,7 +379,7 @@
       if (inPractice) {
         const isCorrect = (choice === correctInterval);
         practiceRemaining--;
-        const outcomeText = choice === 'unsure' ? "Marked as unsure." : (isCorrect ? "Correct!" : "Incorrect.");
+        const outcomeText = isCorrect ? "Correct!" : "Incorrect.";
         if (practiceRemaining > 0) {
           status.textContent = `${outcomeText} (Practice — not scored, ${practiceRemaining} more practice trial${practiceRemaining === 1 ? '' : 's'} left)`;
         } else {
@@ -395,39 +393,26 @@
 
       const gapMs = gapOptions[gapIndex];
       trialCount++;
-      let isCorrect = null;
 
-      if (choice === 'unsure') {
-        results.push({ trial: trialCount, gapMs, correct: 'unsure' });
+      const isCorrect = (choice === correctInterval);
+      results.push({ trial: trialCount, gapMs, correct: isCorrect });
+      chart.data.datasets[isCorrect ? 0 : 1].data.push({ x: trialCount, y: gapMs });
+
+      // direction: 'same' at the floor/ceiling (index clamped) suppresses a
+      // spurious reversal, since the staircase didn't actually move there.
+      const prevGapIndex = gapIndex;
+      if (isCorrect && gapIndex > 0) gapIndex--;
+      else if (!isCorrect && gapIndex < gapOptions.length - 1) gapIndex++;
+
+      const direction = gapIndex > prevGapIndex ? 'up' : gapIndex < prevGapIndex ? 'down' : 'same';
+      if (lastDirection && direction !== lastDirection && direction !== 'same') {
+        reversals.push(trialCount);
+        reversalGaps.push(gapMs);
         chart.data.datasets[2].data.push({ x: trialCount, y: gapMs });
-        if (gapIndex < gapOptions.length - 1) gapIndex++;
-        const direction = 'up';
-        if (lastDirection && direction !== lastDirection) {
-          reversals.push(trialCount);
-          reversalGaps.push(gapMs);
-          chart.data.datasets[3].data.push({ x: trialCount, y: gapMs });
-        }
-        lastDirection = direction;
-        status.textContent = "Marked as unsure.";
-      } else {
-        isCorrect = (choice === correctInterval);
-        results.push({ trial: trialCount, gapMs, correct: isCorrect });
-        chart.data.datasets[isCorrect ? 0 : 1].data.push({ x: trialCount, y: gapMs });
-
-        const prevGapIndex = gapIndex;
-        if (isCorrect && gapIndex > 0) gapIndex--;
-        else if (!isCorrect && gapIndex < gapOptions.length - 1) gapIndex++;
-
-        const direction = gapIndex > prevGapIndex ? 'up' : gapIndex < prevGapIndex ? 'down' : 'same';
-        if (lastDirection && direction !== lastDirection && direction !== 'same') {
-          reversals.push(trialCount);
-          reversalGaps.push(gapMs);
-          chart.data.datasets[3].data.push({ x: trialCount, y: gapMs });
-        }
-        lastDirection = direction;
-
-        status.textContent = isCorrect ? "Correct!" : "Incorrect.";
       }
+      lastDirection = direction;
+
+      status.textContent = isCorrect ? "Correct!" : "Incorrect.";
 
       chart.update();
       choicesContainer.style.display = "none";
@@ -474,7 +459,6 @@
     makeTouchFriendly(playBtn, () => safeStartTrial());
     makeTouchFriendly(choice1, () => submitAnswer(1));
     makeTouchFriendly(choice2, () => submitAnswer(2));
-    makeTouchFriendly(choiceUnsure, () => submitAnswer('unsure'));
     makeTouchFriendly(exportBtn, () => exportResults());
 
     // populate startGapSelect with same options as gapOptions and keep gapIndex in sync
@@ -503,7 +487,6 @@
       playBtn.disabled = !value;
       choice1.disabled = !value;
       choice2.disabled = !value;
-      choiceUnsure.disabled = !value;
     }
 
     (function initEarSelect(){
@@ -568,7 +551,7 @@
     });
 
     // also allow keyboard activation
-    [playBtn, choice1, choice2, choiceUnsure, exportBtn].forEach(el=>{
+    [playBtn, choice1, choice2, exportBtn].forEach(el=>{
       el.addEventListener('keydown', (e)=> { if(e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.click(); }});
     });
 
