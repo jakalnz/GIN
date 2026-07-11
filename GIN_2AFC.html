@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>2AFC GIN Test</title>
+  <title>GIN Two-Interval Forced-Choice Test</title>
  
   <script src='https://cdn.jsdelivr.net/npm/chart.js'></script>
   <style>
@@ -82,7 +82,7 @@
   </style>
 </head>
 <body>
-  <h2>Gaps-in-Noise Test (touch friendly)</h2>
+  <h2>Gaps-in-Noise: Two-Interval Forced-Choice Test (touch friendly)</h2>
   <h1>Instructions</h1>
   <p>In each trial, you will hear two intervals of white noise. One of the intervals will contain a brief silent gap. Your task is to identify which interval (first or second) contained the gap. Even if you're not sure, please make your best guess — every trial needs a First or Second answer for the results to be valid.</p>
   <p>First, adjust the volume to a comfortable level and confirm the channel is correct. Then you'll complete 3 short practice trials (not scored) before the real test begins. The gap duration will adjust based on your responses, and your threshold is estimated from the staircase's reversal points.</p>
@@ -140,7 +140,7 @@
               <li>This is a forced-choice task: you must pick First or Second every trial, even if you're not sure. Forcing a guess (rather than offering an "unsure" option) is what makes this design bias-free — it removes the effect of individual differences in willingness to commit to an answer, so the measured threshold reflects genuine sensitivity rather than response caution.</li>
               <li>Noise is freshly generated per interval per trial, so no waveform repeats.</li>
               <li>Gap onset/offset use a short (~5ms, or half the gap for very short gaps) linear fade rather than an instant cut, to avoid an audible "click" at the edges that could act as a cue independent of the gap itself.</li>
-              <li>The gap's position within its interval is randomized per trial (kept at least 60ms from the interval's start/end), rather than fixed at the interval's midpoint, so its timing can't be anticipated.</li>
+              <li>The gap's position within its interval is randomized per trial (kept at least 100ms from the interval's start/end — i.e. somewhere in the middle 800ms of each 1000ms interval), rather than fixed at the interval's midpoint, so its timing can't be anticipated.</li>
           </ul>
 
           <h3>Channel routing (ear selection)</h3>
@@ -194,7 +194,8 @@
     let calibrationConfirmed = false;
 
     const RAMP_MS = 5; // fade duration at gap onset/offset, avoids audible clicks
-    const EDGE_MARGIN_MS = 60; // minimum distance of the gap from interval start/end
+    const EDGE_MARGIN_MS = 100; // minimum distance of the gap from interval start/end
+    const INTERVAL_DURATION_SEC = 1.0; // duration of each of the two noise intervals per trial
 
     let inPractice = false;
     let practiceRemaining = 0;
@@ -353,8 +354,8 @@
 
       correctInterval = Math.random() < 0.5 ? 1 : 2;
       const gapMs = inPractice ? PRACTICE_EASY_GAP_MS : gapOptions[gapIndex];
-      const buffer1 = createNoiseBuffer(1.0, correctInterval === 1 ? gapMs : 0);
-      const buffer2 = createNoiseBuffer(1.0, correctInterval === 2 ? gapMs : 0);
+      const buffer1 = createNoiseBuffer(INTERVAL_DURATION_SEC, correctInterval === 1 ? gapMs : 0);
+      const buffer2 = createNoiseBuffer(INTERVAL_DURATION_SEC, correctInterval === 2 ? gapMs : 0);
 
       playBuffer(buffer1, 0);
       playBuffer(buffer2, 1.5);
