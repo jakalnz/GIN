@@ -163,7 +163,7 @@
     <div id="feedback" aria-live="polite"></div>
     <footer> <br><br>This is a simple GIN thresholding test (Staircase Method): <br>
         You will first complete 3 short practice trials (not scored) to get familiar with the task, then the real test begins.<br>
-        You will be presented with a 500ms long sound clip when you press [Play Sound].<br> Your task is to determine whether there is a gap in the sound. If you hear a gap, click the 'Yes' button. If you don't hear a gap, click the 'No' button. The test will continue for 20 trials. <br>Your threshold is estimated from the staircase's reversal points (where your responses flip from correct to incorrect or vice versa). <br> If you provide a false positive the test will extend by 5 trials!
+        You will be presented with a 1000ms long sound clip when you press [Play Sound] (toggleable to 500ms).<br> Your task is to determine whether there is a gap in the sound. If you hear a gap, click the 'Yes' button. If you don't hear a gap, click the 'No' button. The test will continue for 20 trials. <br>Your threshold is estimated from the staircase's reversal points (where your responses flip from correct to incorrect or vice versa). <br> If you provide a false positive the test will extend by 5 trials!
         <br><br>
         Note: the volume calibration step sets a comfortable, consistent listening level and confirms channel routing — it does not measure absolute sound pressure level (dB SPL), which depends on your headphones/speakers.
         <br>
@@ -246,15 +246,15 @@
         }
 
         // Add duration control variables at the top with other variables
-        let soundDuration = 0.5; // Default 500ms
-        let gapStartTime = 0.25; // Default 250ms
+        let soundDuration = 1.0; // Default 1000ms
+        let gapStartTime = 0.5; // Default 500ms
 
         // Move duration control creation to DOM-ready to avoid timing issues
         document.addEventListener('DOMContentLoaded', () => {
             // duration toggle button
             const durationButton = document.createElement('button');
             durationButton.id = 'durationButton';
-            durationButton.innerText = 'Duration 500ms';
+            durationButton.innerText = 'Duration 1000ms';
             durationButton.style.margin = '10px';
             durationButton.className = 'secondary';
             // place after controls
