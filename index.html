@@ -130,7 +130,7 @@
     <section class="card" aria-label="Instructions">
         <h2>Instructions</h2>
         <p>You will first complete 3 short practice trials (not scored) to get familiar with the task, then the real test begins.</p>
-        <p>You will be presented with a 1000ms long sound clip when you press "Play Sound" (toggleable to 500ms). Your task is to determine whether there is a gap in the sound. If you hear a gap, click "Yes". If you don't hear a gap, click "No". The test will continue for 20 trials. Your threshold is estimated from the staircase's reversal points (where your responses flip from correct to incorrect or vice versa). If you provide a false positive the test will extend by 5 trials.</p>
+        <p>You will be presented with a 1000ms long sound clip when you press "Play Sound" (toggleable to 500ms). Your task is to determine whether there is a gap in the sound. If you hear a gap, click "Yes". If you don't hear a gap, click "No". The test continues until the staircase has reversed direction 8 times; your threshold is estimated from those reversal points (where your responses flip from correct to incorrect or vice versa).</p>
         <p>Note: the volume calibration step sets a comfortable, consistent listening level and confirms channel routing — it does not measure absolute sound pressure level (dB SPL), which depends on your headphones/speakers.</p>
     </section>
 
@@ -224,8 +224,9 @@
             <h3>Staircase &amp; threshold estimation</h3>
             <ul>
                 <li>A 1-down/1-up staircase: a correct response shrinks the next gap (harder), an incorrect response grows it (easier).</li>
-                <li>A false positive (reporting a gap when there wasn't one) extends the test by 5 trials.</li>
-                <li>Your threshold is estimated as the mean gap duration at the staircase's last several <em>reversals</em> (points where responses flip from correct to incorrect or vice versa) — a more standard and less noisy estimator than simply averaging the last few trials regardless of direction.</li>
+                <li>The test stops after 8 reversals (points where the staircase's direction flips) — not after a fixed trial count. This ties test length to the staircase actually having converged, rather than to a fixed number of trials or to a specific response type.</li>
+                <li>Your threshold is estimated as the mean gap duration at the last 6 reversals — the first 2 are discarded, since they reflect the staircase still settling from its starting point rather than steady-state performance.</li>
+                <li>A false positive (saying "Yes" when there was no gap) can only occur once the staircase has been driven down to the floor (0ms gap). It no longer extends the test — it's simply counted and reported in your results, since a test-length penalty tied to one response type doesn't actually improve the threshold estimate and can make sessions unpredictably long.</li>
             </ul>
 
             <button id="aboutCloseButton" class="secondary" style="margin-top:8px;">Close</button>
@@ -488,11 +489,24 @@
         let gapDurations = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20];
         let currentGapIndex = 5;  // Index 5 corresponds to 10ms
 
-        let maxTrials = 20;
+        const maxReversals = 8;
+        const DISCARD_FIRST_REVERSALS = 2; // early reversals reflect the staircase still settling, not steady-state
+        let falsePositiveCount = 0;
         const trialsDisplay = document.getElementById('trialsRemaining');
 
         function updateTrialsDisplay() {
-            trialsDisplay.innerText = `Trials remaining: ${maxTrials - totalTrials}`;
+            trialsDisplay.innerText = `Trials completed: ${totalTrials} | Reversals: ${reversals.length} of ${maxReversals}`;
+        }
+
+        // Discard the first couple of reversals (the staircase is still settling
+        // in from its starting gap) and average the rest, capped at
+        // REVERSALS_FOR_THRESHOLD, for a more stable steady-state estimate.
+        function computeThreshold() {
+            const usable = reversals.slice(DISCARD_FIRST_REVERSALS);
+            if (usable.length < 2) return null;
+            const used = usable.slice(-REVERSALS_FOR_THRESHOLD);
+            const avg = used.reduce((a, b) => a + b, 0) / used.length;
+            return { avg, count: used.length };
         }
 
         function logResponse(response) {
@@ -514,13 +528,14 @@
             let gapDuration = gapDurations[currentGapIndex];
 
             totalTrials++;
-            updateTrialsDisplay();
 
-            // Check for false positive (reporting gap when there isn't one)
+            // A false positive (saying "yes" when there was no gap) can only
+            // happen once the staircase has been driven down to the floor.
+            // It's flagged for the record but no longer extends the test —
+            // test length is driven by the staircase reaching enough
+            // reversals, not by a specific response type.
             if (response === "yes" && gapDuration === 0) {
-                maxTrials += 5;
-                document.getElementById("feedback").innerText = "Warning: Test has been extended by 5 trials due to false positive response.";
-                updateTrialsDisplay();
+                falsePositiveCount++;
             }
 
             let direction;
@@ -544,26 +559,20 @@
             }
             lastDirection = direction;
             chart.update();
+            updateTrialsDisplay();
 
             let accuracy = (correctResponses / totalTrials) * 100;
             responses.push({ trial: totalTrials, gapDuration: gapDuration, response: response, accuracy: accuracy.toFixed(2) });
 
-            if (totalTrials >= maxTrials) {
-                let threshold;
-                let usedReversals = 0;
-                if (reversals.length >= 2) {
-                    const lastReversals = reversals.slice(-REVERSALS_FOR_THRESHOLD);
-                    threshold = lastReversals.reduce((a, b) => a + b, 0) / lastReversals.length;
-                    usedReversals = lastReversals.length;
-                } else {
-                    // Fallback for an unusually short/atypical run with too few reversals
-                    let last4Gaps = responses.slice(-4).map(r => r.gapDuration);
-                    threshold = last4Gaps.reduce((a, b) => a + b, 0) / last4Gaps.length;
-                }
-                const thresholdNote = usedReversals > 0
-                    ? `Estimated Threshold: ${threshold.toFixed(1)} ms (mean of last ${usedReversals} reversals)`
-                    : `Estimated Threshold: ${threshold.toFixed(1)} ms (fallback: mean of last 4 trials — too few reversals occurred)`;
-                document.getElementById("feedback").innerText = `Test Complete!\nAccuracy: ${accuracy.toFixed(2)}%\n${thresholdNote}`;
+            if (reversals.length >= maxReversals) {
+                const result = computeThreshold();
+                const falsePositiveNote = falsePositiveCount > 0
+                    ? `\nFalse positives: ${falsePositiveCount}`
+                    : '';
+                const thresholdNote = result
+                    ? `Estimated Threshold: ${result.avg.toFixed(1)} ms (mean of last ${result.count} reversals, after discarding the first ${DISCARD_FIRST_REVERSALS})`
+                    : `Not enough reversals to estimate threshold.`;
+                document.getElementById("feedback").innerText = `Test Complete!\nAccuracy: ${accuracy.toFixed(2)}%\n${thresholdNote}${falsePositiveNote}`;
             }
         }
 
@@ -571,10 +580,10 @@
             responses = [];
             correctResponses = 0;
             totalTrials = 0;
-            maxTrials = 20;
             currentGapIndex = 5;
             reversals = [];
             lastDirection = null;
+            falsePositiveCount = 0;
             chart.data.datasets.forEach(d => d.data = []);
             chart.update();
             document.getElementById("feedback").innerText = "";
@@ -692,11 +701,11 @@
                 csvContent += `${response.trial},${response.gapDuration},${response.response},${response.accuracy},${earMode},${volumePercent}\n`;
             });
             csvContent += `\nReversals (ms),${reversals.join(' ')}\n`;
-            if (reversals.length >= 2) {
-                const lastReversals = reversals.slice(-REVERSALS_FOR_THRESHOLD);
-                const threshold = lastReversals.reduce((a, b) => a + b, 0) / lastReversals.length;
-                csvContent += `Estimated Threshold (ms),${threshold.toFixed(1)},based on last ${lastReversals.length} reversals\n`;
+            const result = computeThreshold();
+            if (result) {
+                csvContent += `Estimated Threshold (ms),${result.avg.toFixed(1)},based on last ${result.count} reversals (first ${DISCARD_FIRST_REVERSALS} discarded)\n`;
             }
+            csvContent += `False Positives,${falsePositiveCount}\n`;
 
             let encodedUri = encodeURI(csvContent);
             let link = document.createElement("a");
