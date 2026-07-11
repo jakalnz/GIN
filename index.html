@@ -91,20 +91,84 @@
                 <option value="right">Right Ear Only</option>
             </select>
         </div>
+    </div>
 
-        <button id="playSound">Play Sound</button>
-        <button id="yesButton" class="secondary">Yes, I heard a gap</button>
-        <button id="noButton" class="secondary">No, I didn't hear a gap</button>
+    <div class="controls" id="calibrationControls" role="group" aria-label="Volume calibration">
+        <div class="control-row">
+            <label class="control-label" for="volumeSlider">Volume</label>
+            <input type="range" id="volumeSlider" min="0" max="100" value="50" style="width: 220px;">
+        </div>
+        <button id="calNoiseButton" class="secondary">Play Calibration Noise</button>
+        <button id="calConfirmButton" class="secondary">Confirm Volume &amp; Channel OK</button>
+    </div>
+    <div id="calibrationStatus" aria-live="polite">Adjust the volume to a comfortable level, then confirm before starting the test.</div>
+
+    <div class="controls" id="testControls" role="group" aria-label="Test controls">
+        <button id="playSound" disabled>Play Sound</button>
+        <button id="yesButton" class="secondary" disabled>Yes, I heard a gap</button>
+        <button id="noButton" class="secondary" disabled>No, I didn't hear a gap</button>
         <button id="resetButton" class="warn">Reset</button>
         <button id="downloadButton" class="secondary">Download Results</button>
+        <button id="aboutButton" class="secondary" aria-haspopup="dialog">About This Procedure</button>
+    </div>
+
+    <div id="aboutOverlay" role="presentation" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1000;">
+        <div id="aboutDialog" role="dialog" aria-modal="true" aria-labelledby="aboutTitle"
+             style="background:#fff; color:#222; max-width:640px; margin:5vh auto; padding:24px 28px; border-radius:12px;
+                    max-height:85vh; overflow-y:auto; text-align:left; box-shadow:0 8px 30px rgba(0,0,0,0.3);">
+            <h2 id="aboutTitle" style="margin-top:0;">About This Procedure</h2>
+
+            <h3>Stimulus</h3>
+            <ul>
+                <li>Each trial is a freshly generated burst of broadband noise (500ms or 1000ms, selectable), so no waveform repeats across trials.</li>
+                <li>A "gap" is a brief drop to silence within the burst, drawn from a fixed set of candidate durations (0–20ms).</li>
+                <li>Gap onset/offset use a short (~5ms, or half the gap for very short gaps) linear ramp rather than an instant cut, to avoid an audible "click" at the edges that could act as a cue independent of the gap itself.</li>
+            </ul>
+
+            <h3>Randomized gap window</h3>
+            <ul>
+                <li>The gap's position within the burst is randomized on every trial (kept at least 60ms from the burst's start/end), rather than fixed at the midpoint.</li>
+                <li>This prevents anticipating "when" the gap will occur and forces genuine gap detection rather than timing-based guessing.</li>
+            </ul>
+
+            <h3>Channel routing (ear selection)</h3>
+            <ul>
+                <li>The Channel selector routes the noise to Binaural (both ears), Left Ear Only, or Right Ear Only via a true stereo buffer — the non-selected ear receives silence, not just a quieter signal.</li>
+                <li>Changing the channel mid-session requires re-confirming calibration before the test can continue, since a channel change can alter perceived loudness/correctness.</li>
+            </ul>
+
+            <h3>Volume calibration &amp; gating</h3>
+            <ul>
+                <li>Before any scored trial, you must play continuous calibration noise, adjust the volume slider to a comfortable level, and confirm it sounds correct for the selected channel.</li>
+                <li>The Play Sound / Yes / No controls are disabled (gated) until calibration is confirmed.</li>
+                <li>This standardizes relative comfort and verifies correct ear routing — it does <em>not</em> measure absolute sound pressure level (dB SPL), which depends on your specific headphones/speakers and device volume.</li>
+            </ul>
+
+            <h3>Practice block</h3>
+            <ul>
+                <li>Immediately after calibration, 3 unscored practice trials run (two easy/large gaps and one no-gap "catch" trial, in random order) so you can get familiar with the task before anything counts.</li>
+            </ul>
+
+            <h3>Staircase &amp; threshold estimation</h3>
+            <ul>
+                <li>A 1-down/1-up staircase: a correct response shrinks the next gap (harder), an incorrect response grows it (easier).</li>
+                <li>A false positive (reporting a gap when there wasn't one) extends the test by 5 trials.</li>
+                <li>Your threshold is estimated as the mean gap duration at the staircase's last several <em>reversals</em> (points where responses flip from correct to incorrect or vice versa) — a more standard and less noisy estimator than simply averaging the last few trials regardless of direction.</li>
+            </ul>
+
+            <button id="aboutCloseButton" class="secondary" style="margin-top:8px;">Close</button>
+        </div>
     </div>
 
     <div id="feedback" aria-live="polite"></div>
     <footer> <br><br>This is a simple GIN thresholding test (Staircase Method): <br>
-        You will be presented with a 500ms long sound clip when you press [Play Sound].<br> Your task is to determine whether there is a gap in the sound. If you hear a gap, click the 'Yes' button. If you don't hear a gap, click the 'No' button. The test will continue for 20 trials. <br>The threshold will be calculated based on your last 4 responses. <br> If you provide a false positive the test will extend by 5 trials!
+        You will first complete 3 short practice trials (not scored) to get familiar with the task, then the real test begins.<br>
+        You will be presented with a 500ms long sound clip when you press [Play Sound].<br> Your task is to determine whether there is a gap in the sound. If you hear a gap, click the 'Yes' button. If you don't hear a gap, click the 'No' button. The test will continue for 20 trials. <br>Your threshold is estimated from the staircase's reversal points (where your responses flip from correct to incorrect or vice versa). <br> If you provide a false positive the test will extend by 5 trials!
+        <br><br>
+        Note: the volume calibration step sets a comfortable, consistent listening level and confirms channel routing — it does not measure absolute sound pressure level (dB SPL), which depends on your headphones/speakers.
         <br>
         <br>
-        
+
     </footer>
 
     <script>
@@ -113,10 +177,45 @@
         let correctResponses = 0;
         let totalTrials = 0;
         let earMode = 'binaural'; // Track ear selection
+        let masterGainNode = null;
+        let calibrationConfirmed = false;
+        let calibrationSource = null;
+        let reversals = [];
+        let lastDirection = null;
+        const REVERSALS_FOR_THRESHOLD = 6;
+
+        let inPractice = false;
+        let practiceQueue = [];
+        const PRACTICE_TRIAL_COUNT = 3;
+        const PRACTICE_EASY_GAP_MS = 20; // largest/easiest gap in gapDurations
+
+        function shuffle(arr) {
+            const a = arr.slice();
+            for (let i = a.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [a[i], a[j]] = [a[j], a[i]];
+            }
+            return a;
+        }
+
+        function startPractice() {
+            inPractice = true;
+            // Two easy (clearly audible) gap trials and one catch (no-gap) trial, order randomized
+            practiceQueue = shuffle([PRACTICE_EASY_GAP_MS, PRACTICE_EASY_GAP_MS, 0]).slice(0, PRACTICE_TRIAL_COUNT);
+            updatePracticeDisplay();
+        }
+
+        function updatePracticeDisplay() {
+            document.getElementById('feedback').innerText =
+                `Practice trial ${PRACTICE_TRIAL_COUNT - practiceQueue.length + 1} of ${PRACTICE_TRIAL_COUNT} (not scored). Press Play Sound.`;
+        }
 
         function initAudio() {
             if (audioContext === null) {
                 audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                masterGainNode = audioContext.createGain();
+                masterGainNode.gain.value = document.getElementById('volumeSlider').value / 100;
+                masterGainNode.connect(audioContext.destination);
             }
             return audioContext;
         }
@@ -181,45 +280,118 @@
             if (earSelect) {
                 earSelect.addEventListener('change', (e) => {
                     earMode = e.target.value;
+                    // Channel changed: require re-confirmation of calibration
+                    setCalibrationConfirmed(false);
+                    document.getElementById('calibrationStatus').innerText = 'Channel changed — please reconfirm volume and channel before continuing.';
                 });
             }
+
+            // Volume slider: live-update master gain if audio context already exists
+            const volumeSlider = document.getElementById('volumeSlider');
+            volumeSlider.addEventListener('input', (e) => {
+                if (masterGainNode) {
+                    masterGainNode.gain.value = e.target.value / 100;
+                }
+            });
+
+            // Calibration noise: continuous gapless noise through the selected channel
+            const calNoiseButton = document.getElementById('calNoiseButton');
+            calNoiseButton.addEventListener('click', async () => {
+                const ctx = initAudio();
+                await ctx.resume();
+                if (calibrationSource) {
+                    // Currently playing: stop it
+                    calibrationSource.stop();
+                    calibrationSource = null;
+                    calNoiseButton.innerText = 'Play Calibration Noise';
+                    return;
+                }
+                const buffer = generateNoiseBuffer(2); // 2s loopable buffer
+                const source = ctx.createBufferSource();
+                source.buffer = buffer;
+                source.loop = true;
+                source.connect(masterGainNode);
+                source.start();
+                calibrationSource = source;
+                calNoiseButton.innerText = 'Stop Calibration Noise';
+            });
+
+            // Confirm calibration: gate the main test controls behind this
+            const calConfirmButton = document.getElementById('calConfirmButton');
+            calConfirmButton.addEventListener('click', () => {
+                if (calibrationSource) {
+                    calibrationSource.stop();
+                    calibrationSource = null;
+                    calNoiseButton.innerText = 'Play Calibration Noise';
+                }
+                setCalibrationConfirmed(true);
+                document.getElementById('calibrationStatus').innerText =
+                    `Calibration confirmed (Volume: ${volumeSlider.value}%, Channel: ${earMode}). A short practice round starts now.`;
+                startPractice();
+            });
         });
+
+        function setCalibrationConfirmed(value) {
+            calibrationConfirmed = value;
+            document.getElementById('playSound').disabled = !value;
+            document.getElementById('yesButton').disabled = !value;
+            document.getElementById('noButton').disabled = !value;
+        }
+
+        // Randomized gap position within the burst (keeps gap fully clear of the
+        // burst edges, and of the short onset/offset ramps used below) so the
+        // gap timing can't be anticipated trial-to-trial.
+        const RAMP_MS = 5; // fade duration at gap onset/offset, avoids audible clicks
+        const EDGE_MARGIN_MS = 60; // minimum distance from burst start/end
+
+        function randomizedGapStart(durationSec, gapMs) {
+            const durationMs = durationSec * 1000;
+            const minStart = EDGE_MARGIN_MS;
+            const maxStart = durationMs - EDGE_MARGIN_MS - gapMs;
+            if (maxStart <= minStart) return durationMs / 2 / 1000; // fallback to center
+            const startMs = minStart + Math.random() * (maxStart - minStart);
+            return startMs / 1000;
+        }
 
         // Update playSound function to use the new duration variables
         async function playSound() {
             try {
                 const ctx = initAudio();
                 await ctx.resume();
-                
+
                 const source = ctx.createBufferSource();
                 const gainNode = ctx.createGain();
                 const buffer = generateNoiseBuffer(soundDuration); // Use variable duration
-                
+
                 source.buffer = buffer;
                 gainNode.gain.value = 1.0;
-                
-                const gapDuration = gapDurations[currentGapIndex];
-                const currentGapStart = ctx.currentTime + gapStartTime; // Use variable gap start
-                
+
+                const gapDuration = inPractice ? practiceQueue[0] : gapDurations[currentGapIndex];
+                const randomizedStart = gapDuration > 0
+                    ? randomizedGapStart(soundDuration, gapDuration)
+                    : gapStartTime;
+                const currentGapStart = ctx.currentTime + randomizedStart;
+
                 source.connect(gainNode);
-                gainNode.connect(ctx.destination);
-                
+                gainNode.connect(masterGainNode);
+
                 if (gapDuration > 0) {
+                    // Clamp the ramp so it never exceeds half the gap itself (matters for the shortest gaps)
+                    const rampSec = Math.min(RAMP_MS, gapDuration / 2) / 1000;
                     gainNode.gain.setValueAtTime(1.0, ctx.currentTime);
-                    gainNode.gain.setValueAtTime(0.0, currentGapStart);
-                    gainNode.gain.setValueAtTime(1.0, currentGapStart + (gapDuration / 1000));
+                    gainNode.gain.setValueAtTime(1.0, currentGapStart);
+                    gainNode.gain.linearRampToValueAtTime(0.0, currentGapStart + rampSec);
+                    gainNode.gain.setValueAtTime(0.0, currentGapStart + (gapDuration / 1000) - rampSec);
+                    gainNode.gain.linearRampToValueAtTime(1.0, currentGapStart + (gapDuration / 1000));
                 }
-                
+
                 source.start();
-                console.log('Playing sound:', { duration: soundDuration * 1000 + 'ms', gapAt: gapStartTime * 1000 + 'ms', gapDuration: gapDuration + 'ms' });
+                console.log('Playing sound:', { duration: soundDuration * 1000 + 'ms', gapAt: (randomizedStart * 1000).toFixed(1) + 'ms', gapDuration: gapDuration + 'ms', ear: earMode });
             } catch (error) {
                 console.error('Error playing sound:', error);
             }
         }
 
-        // Remove duplicate event listener and function definitions
-        document.getElementById("playSound").removeEventListener("click", playSound);
-        document.getElementById("playSound").addEventListener("click", playSound);
         let gapDurations = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20];
         let currentGapIndex = 5;  // Index 5 corresponds to 10ms
 
@@ -234,8 +406,23 @@
         }
 
         function logResponse(response) {
+            if (inPractice) {
+                const practiceGap = practiceQueue.shift();
+                const isCorrect = (response === "yes" && practiceGap > 0) || (response === "no" && practiceGap === 0);
+                if (practiceQueue.length > 0) {
+                    document.getElementById("feedback").innerText =
+                        `${isCorrect ? "Correct!" : "Not quite."} (Practice — not scored, ${practiceQueue.length} more practice trial${practiceQueue.length === 1 ? '' : 's'} left)`;
+                } else {
+                    inPractice = false;
+                    document.getElementById("feedback").innerText =
+                        `${isCorrect ? "Correct!" : "Not quite."} Practice complete — the real test begins now.`;
+                    updateTrialsDisplay();
+                }
+                return;
+            }
+
             let gapDuration = gapDurations[currentGapIndex];
-            
+
             totalTrials++;
             updateTrialsDisplay();
 
@@ -246,20 +433,42 @@
                 updateTrialsDisplay();
             }
 
+            let direction;
             if ((response === "yes" && gapDuration > 0) || (response === "no" && gapDuration === 0)) {
                 correctResponses++;
+                direction = 'down';
                 currentGapIndex = Math.max(0, currentGapIndex - 1);
             } else {
+                direction = 'up';
                 currentGapIndex = Math.min(gapDurations.length - 1, currentGapIndex + 1);
             }
+
+            // A reversal is where the staircase changes direction; its stimulus
+            // level (the gap just presented) is the value used for thresholding.
+            if (lastDirection !== null && direction !== lastDirection) {
+                reversals.push(gapDuration);
+            }
+            lastDirection = direction;
 
             let accuracy = (correctResponses / totalTrials) * 100;
             responses.push({ trial: totalTrials + 1, gapDuration: gapDuration, response: response, accuracy: accuracy.toFixed(2) });
 
             if (totalTrials >= maxTrials) {
-                let last4Gaps = responses.slice(-4).map(r => r.gapDuration);
-                let threshold = last4Gaps.reduce((a, b) => a + b, 0) / last4Gaps.length;
-                document.getElementById("feedback").innerText = `Test Complete!\nAccuracy: ${accuracy.toFixed(2)}%\nEstimated Threshold: ${threshold.toFixed(1)} ms`;
+                let threshold;
+                let usedReversals = 0;
+                if (reversals.length >= 2) {
+                    const lastReversals = reversals.slice(-REVERSALS_FOR_THRESHOLD);
+                    threshold = lastReversals.reduce((a, b) => a + b, 0) / lastReversals.length;
+                    usedReversals = lastReversals.length;
+                } else {
+                    // Fallback for an unusually short/atypical run with too few reversals
+                    let last4Gaps = responses.slice(-4).map(r => r.gapDuration);
+                    threshold = last4Gaps.reduce((a, b) => a + b, 0) / last4Gaps.length;
+                }
+                const thresholdNote = usedReversals > 0
+                    ? `Estimated Threshold: ${threshold.toFixed(1)} ms (mean of last ${usedReversals} reversals)`
+                    : `Estimated Threshold: ${threshold.toFixed(1)} ms (fallback: mean of last 4 trials — too few reversals occurred)`;
+                document.getElementById("feedback").innerText = `Test Complete!\nAccuracy: ${accuracy.toFixed(2)}%\n${thresholdNote}`;
             }
         }
 
@@ -269,21 +478,14 @@
             totalTrials = 0;
             maxTrials = 20;
             currentGapIndex = 5;
+            reversals = [];
+            lastDirection = null;
             document.getElementById("feedback").innerText = "";
             updateTrialsDisplay();
         }
 
         // Initialize trials display
         updateTrialsDisplay();
-
-        // Initialize audio context when the play button is clicked
-        document.getElementById("playSound").addEventListener("click", async () => {
-            if (!audioContext) {
-                audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            }
-            await audioContext.resume(); // Ensure audio context is running
-            playSound();
-        });
 
         // Prevent double-activation on touch devices:
         let lastTouchTime = 0;
@@ -327,21 +529,51 @@
             }
         }
 
-        // Replace direct playSound binding with safePlaySound on mobile-ready handlers
         document.getElementById("playSound").addEventListener("click", async () => {
-            if (!audioContext) {
-                audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            }
-            await audioContext.resume();
+            const ctx = initAudio();
+            await ctx.resume();
             safePlaySound();
         });
 
-        // Also wire touch-friendly click to existing touch logic in case durationButton insertion created other handlers.
-        // Ensure the standard handlers still exist (kept existing code wiring)
         document.getElementById("yesButton").addEventListener("click", () => logResponse("yes"));
         document.getElementById("noButton").addEventListener("click", () => logResponse("no"));
         document.getElementById("resetButton").addEventListener("click", resetTest);
         document.getElementById("downloadButton").addEventListener("click", downloadResults);
+
+        const aboutOverlay = document.getElementById("aboutOverlay");
+        function openAbout() { aboutOverlay.style.display = "block"; }
+        function closeAbout() { aboutOverlay.style.display = "none"; }
+        document.getElementById("aboutButton").addEventListener("click", openAbout);
+        document.getElementById("aboutCloseButton").addEventListener("click", closeAbout);
+        aboutOverlay.addEventListener("click", (e) => {
+            if (e.target === aboutOverlay) closeAbout(); // click on backdrop, not the dialog itself
+        });
+        document.addEventListener("keydown", (e) => {
+            if (e.key === "Escape" && aboutOverlay.style.display === "block") closeAbout();
+        });
+
+        function downloadResults() {
+            let csvContent = "data:text/csv;charset=utf-8,";
+            csvContent += "Trial,Gap Duration (ms),Response,Accuracy (%),Channel,Volume (%)\n";
+            const volumePercent = document.getElementById('volumeSlider').value;
+            responses.forEach(response => {
+                csvContent += `${response.trial},${response.gapDuration},${response.response},${response.accuracy},${earMode},${volumePercent}\n`;
+            });
+            csvContent += `\nReversals (ms),${reversals.join(' ')}\n`;
+            if (reversals.length >= 2) {
+                const lastReversals = reversals.slice(-REVERSALS_FOR_THRESHOLD);
+                const threshold = lastReversals.reduce((a, b) => a + b, 0) / lastReversals.length;
+                csvContent += `Estimated Threshold (ms),${threshold.toFixed(1)},based on last ${lastReversals.length} reversals\n`;
+            }
+
+            let encodedUri = encodeURI(csvContent);
+            let link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "gin_behavioral_test_results.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
     </script>
 </body>
 </html>
