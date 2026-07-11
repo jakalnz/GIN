@@ -111,6 +111,14 @@
         .chart-wrap { position: relative; width: 100%; height: 320px; }
         .chart-wrap canvas { width: 100% !important; height: 100% !important; }
 
+        /* Shown only on devices likely to have a physical keyboard (desktop
+           with a mouse/trackpad) — touchscreens typically report
+           pointer:coarse and no hover, so this hint stays hidden there. */
+        .keyboard-hint { display: none; text-align: center; color: var(--muted); font-size: 0.9rem; margin-top: 8px; }
+        @media (hover: hover) and (pointer: fine) {
+            .keyboard-hint { display: block; }
+        }
+
         /* Mobile: full-width-ish buttons */
         @media (max-width: 600px) {
             .page-header h1 { font-size: 1.3rem; }
@@ -148,7 +156,7 @@
 
             <div class="control-row">
                 <label class="control-label" for="volumeSlider">Volume</label>
-                <input type="range" id="volumeSlider" min="0" max="100" value="50" style="width: 260px;">
+                <input type="range" id="volumeSlider" min="0" max="100" value="10" style="width: 260px;">
             </div>
             <button id="calNoiseButton" class="secondary">Play Calibration Noise</button>
             <button id="calConfirmButton" class="secondary">Confirm Volume &amp; Channel OK</button>
@@ -165,6 +173,7 @@
             <button id="noButton" class="secondary" disabled>No, I didn't hear a gap</button>
             <div id="trialsRemaining"></div>
             <div id="feedback" aria-live="polite"></div>
+            <p class="keyboard-hint">Keyboard shortcuts: Space = Play Sound, Y = Yes, N = No</p>
         </div>
     </section>
 

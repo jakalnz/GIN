@@ -105,6 +105,14 @@
     .control-label { font-weight: 600; font-size: 16px; }
     .card-divider { border: none; border-top: 1px solid var(--card-border); margin: 16px 0; }
 
+    /* Shown only on devices likely to have a physical keyboard (desktop with
+       a mouse/trackpad) — touchscreens typically report pointer:coarse and
+       no hover, so this hint stays hidden there where it wouldn't apply. */
+    .keyboard-hint { display: none; text-align: center; color: var(--muted); font-size: 0.9rem; margin-top: 8px; }
+    @media (hover: hover) and (pointer: fine) {
+      .keyboard-hint { display: block; }
+    }
+
     @media (max-width:600px){
       .page-header h1 { font-size: 1.3rem; }
       .card { padding: 18px 16px; }
@@ -141,7 +149,7 @@
 
         <div class="control-row">
           <label class="control-label" for="volumeSlider">Volume</label>
-          <input type="range" id="volumeSlider" min="0" max="100" value="50" style="width: 260px;">
+          <input type="range" id="volumeSlider" min="0" max="100" value="10" style="width: 260px;">
         </div>
         <button id="calNoiseButton" class="secondary">Play Calibration Noise</button>
 
@@ -169,6 +177,7 @@
         </div>
 
         <div id="status" aria-live="polite"></div>
+        <p class="keyboard-hint">Keyboard shortcuts: Space = Play Trial, 1 = First, 2 = Second</p>
       </div>
     </section>
 
@@ -246,7 +255,7 @@
     let earMode = 'binaural'; // Track ear selection
 
     const masterGainNode = audioCtx.createGain();
-    masterGainNode.gain.value = 0.5;
+    masterGainNode.gain.value = 0.1; // default volume kept low; students turn it up deliberately during calibration
     masterGainNode.connect(audioCtx.destination);
     let calibrationSource = null;
     let calibrationConfirmed = false;
