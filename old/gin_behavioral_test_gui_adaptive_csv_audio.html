@@ -1,0 +1,104 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GIN Behavioral Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }
+        button { margin: 10px; padding: 10px 20px; font-size: 16px; }
+        #results { margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <h1>Gaps-in-Noise (GIN) Behavioral Test</h1>
+    <button onclick="playSound()">Play Sound</button>
+    <button onclick="recordResponse(true)">Heard a Gap</button>
+    <button onclick="recordResponse(false)">No Gap</button>
+    <button onclick="resetTest()">Reset Test</button>
+    <div id="results"></div>
+    <script>
+        let audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        let gapDuration = 10; // Initial gap duration in ms
+        let trialNumber = 0;
+        let correctResponses = 0;
+        let totalResponses = 0;
+        let results = [];
+
+        function playSound() {
+            let duration = 0.5; // 500 ms
+            let sampleRate = audioContext.sampleRate;
+            let buffer = audioContext.createBuffer(1, sampleRate * duration, sampleRate);
+            let data = buffer.getChannelData(0);
+
+            // Fill buffer with white noise
+            for (let i = 0; i < data.length; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+
+            // Insert silent gap
+            let gapStart = Math.floor(sampleRate * 0.25); // 250 ms
+            let gapEnd = gapStart + Math.floor(sampleRate * (gapDuration / 1000));
+            for (let i = gapStart; i < gapEnd; i++) {
+                data[i] = 0;
+            }
+
+            let source = audioContext.createBufferSource();
+            source.buffer = buffer;
+            source.connect(audioContext.destination);
+            source.start();
+        }
+
+        function recordResponse(heardGap) {
+            trialNumber++;
+            let correct = (gapDuration > 0 && heardGap) || (gapDuration === 0 && !heardGap);
+            if (correct) correctResponses++;
+            totalResponses++;
+            results.push({ trial: trialNumber, gapDuration: gapDuration, heardGap: heardGap, correct: (correctResponses / totalResponses) * 100 });
+
+            // Adaptive staircase method
+            if (correct) {
+                gapDuration = Math.max(2, gapDuration - 2); // Decrease gap duration
+            } else {
+                gapDuration = Math.min(20, gapDuration + 2); // Increase gap duration
+            }
+
+            if (trialNumber >= 20) {
+                showResults();
+            }
+        }
+
+        function showResults() {
+            let accuracy = (correctResponses / totalResponses) * 100;
+            let resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = `<p>Test completed!</p><p>Accuracy: ${accuracy.toFixed(2)}%</p>`;
+            downloadCSV();
+        }
+
+        function resetTest() {
+            trialNumber = 0;
+            correctResponses = 0;
+            totalResponses = 0;
+            gapDuration = 10;
+            results = [];
+            document.getElementById('results').innerHTML = '';
+        }
+
+        function downloadCSV() {
+            let csvContent = "data:text/csv;charset=utf-8,";
+            csvContent += "Trial,Gap Duration (ms),Heard Gap,Correct\n";
+            results.forEach(row => {
+                csvContent += `${row.trial},${row.gapDuration},${row.heardGap},${row.correct}\n`;
+            });
+            let encodedUri = encodeURI(csvContent);
+            let link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "gin_test_results.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    </script>
+</body>
+</html>

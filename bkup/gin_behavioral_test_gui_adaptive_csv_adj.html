@@ -1,0 +1,113 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GIN Behavioral Test -V2</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }
+        button { padding: 10px 20px; margin: 10px; font-size: 16px; }
+        #feedback { margin-top: 20px; font-size: 18px; }
+    </style>
+</head>
+<body>
+    <h1>Gaps-in-Noise (GIN) Behavioral Test</h1>
+    <button id="playSound">Play Sound</button>
+    <button id="yesButton">Yes, I heard a gap</button>
+    <button id="noButton">No, I didn't hear a gap</button>
+    <button id="resetButton">Reset</button>
+    <button id="downloadButton">Download Results</button>
+    <div id="feedback"></div>
+
+    <script>
+        let audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        let gapDurations = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20];
+        let currentGapIndex = 4;
+        let responses = [];
+        let correctResponses = 0;
+        let totalTrials = 0;
+
+        function generateNoiseBuffer(duration) {
+            let sampleRate = audioContext.sampleRate;
+            let buffer = audioContext.createBuffer(1, sampleRate * duration, sampleRate);
+            let data = buffer.getChannelData(0);
+            for (let i = 0; i < data.length; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+            return buffer;
+        }
+
+        function playSound() {
+            let noiseBuffer = generateNoiseBuffer(0.5);
+            let noiseSource = audioContext.createBufferSource();
+            noiseSource.buffer = noiseBuffer;
+
+            let gapDuration = gapDurations[currentGapIndex] / 1000;
+            let gapStart = 0.25;
+            let gapEnd = gapStart + gapDuration;
+
+            let gainNode = audioContext.createGain();
+            gainNode.gain.setValueAtTime(1, audioContext.currentTime);
+            gainNode.gain.setValueAtTime(0, audioContext.currentTime + gapStart);
+            gainNode.gain.setValueAtTime(1, audioContext.currentTime + gapEnd);
+
+            noiseSource.connect(gainNode).connect(audioContext.destination);
+            noiseSource.start();
+        }
+
+        function logResponse(response) {
+            let gapDuration = gapDurations[currentGapIndex];
+            
+            totalTrials++;
+
+            if ((response === "yes" && gapDuration > 0) || (response === "no" && gapDuration === 0)) {
+                correctResponses++;
+                currentGapIndex = Math.max(0, currentGapIndex - 1);
+            } else {
+                currentGapIndex = Math.min(gapDurations.length - 1, currentGapIndex + 1);
+            }
+
+            let accuracy = (correctResponses / totalTrials) * 100;
+            responses.push({ trial: totalTrials + 1, gapDuration: gapDuration, response: response, accuracy: accuracy.toFixed(2) });
+
+            if (totalTrials >= 20) {
+                // Calculate average of last 4 gap durations from responses
+                let last4Gaps = responses.slice(-4).map(r => r.gapDuration);
+                let threshold = last4Gaps.reduce((a, b) => a + b, 0) / last4Gaps.length;
+                document.getElementById("feedback").innerText = `Test Complete!\nAccuracy: ${accuracy.toFixed(2)}%\nEstimated Threshold: ${threshold.toFixed(1)} ms`;
+            }
+        }
+
+        function resetTest() {
+            responses = [];
+            correctResponses = 0;
+            totalTrials = 0;
+            currentGapIndex = 4;
+            document.getElementById("feedback").innerText = "";
+        }
+
+        function downloadResults() {
+            let csvContent = "data:text/csv;charset=utf-8,";
+            csvContent += "Trial,Gap Duration (ms),Response\n";
+            responses.forEach(response => {
+                csvContent += `${response.trial},${response.gapDuration},${response.response},${response.accuracy}\n`;
+            });
+
+            let encodedUri = encodeURI(csvContent);
+            let link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "gin_behavioral_test_results.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        document.getElementById("playSound").addEventListener("click", playSound);
+        document.getElementById("yesButton").addEventListener("click", () => logResponse("yes"));
+        document.getElementById("noButton").addEventListener("click", () => logResponse("no"));
+        document.getElementById("resetButton").addEventListener("click", resetTest);
+        document.getElementById("downloadButton").addEventListener("click", downloadResults);
+    </script>
+</body>
+</html>
