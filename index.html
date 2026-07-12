@@ -462,6 +462,20 @@
                 const ctx = initAudio();
                 await ctx.resume();
 
+                // A fresh play unlocks exactly one Yes/No response for this
+                // trial (see logResponse, which re-locks them). Prevents a
+                // stray double-click from silently logging multiple trials
+                // for a single played sound.
+                document.getElementById('yesButton').disabled = false;
+                document.getElementById('noButton').disabled = false;
+
+                // Once the real (scored) test begins, clear any leftover
+                // "Practice complete" message rather than leaving it stale
+                // through the first real trial.
+                if (!inPractice) {
+                    document.getElementById('feedback').innerText = '';
+                }
+
                 const source = ctx.createBufferSource();
                 const gainNode = ctx.createGain();
                 const buffer = generateNoiseBuffer(soundDuration); // Use variable duration
@@ -519,6 +533,11 @@
         }
 
         function logResponse(response) {
+            // Exactly one response counts per played sound; re-enabled by
+            // the next Play Sound press (see playSound).
+            document.getElementById('yesButton').disabled = true;
+            document.getElementById('noButton').disabled = true;
+
             if (inPractice) {
                 const practiceGap = practiceQueue.shift();
                 const isCorrect = (response === "yes" && practiceGap > 0) || (response === "no" && practiceGap === 0);
