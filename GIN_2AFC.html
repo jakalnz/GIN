@@ -486,12 +486,14 @@
       }
 
       const direction = gapIndex > prevGapIndex ? 'up' : gapIndex < prevGapIndex ? 'down' : 'same';
-      if (lastDirection && direction !== lastDirection && direction !== 'same') {
-        reversals.push(trialCount);
-        reversalGaps.push(gapMs);
-        chart.data.datasets[2].data.push({ x: trialCount, y: gapMs });
+      if (direction !== 'same') {
+        if (lastDirection && direction !== lastDirection) {
+          reversals.push(trialCount);
+          reversalGaps.push(gapMs);
+          chart.data.datasets[2].data.push({ x: trialCount, y: gapMs });
+        }
+        lastDirection = direction;
       }
-      lastDirection = direction;
 
       status.textContent = isCorrect ? "Correct!" : "Incorrect.";
 
