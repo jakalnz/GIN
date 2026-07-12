@@ -131,7 +131,7 @@
     <section class="card" aria-label="Instructions">
       <h2>Instructions</h2>
       <p>In each trial, you will hear two intervals of white noise. One of the intervals will contain a brief silent gap. Your task is to identify which interval (first or second) contained the gap. Even if you're not sure, please make your best guess — every trial needs a First or Second answer for the results to be valid.</p>
-      <p>First, adjust the volume to a comfortable level and confirm the channel is correct. Then you'll complete 3 short practice trials (not scored) before the real test begins. The gap duration will adjust based on your responses, and your threshold is estimated from the staircase's reversal points.</p>
+      <p>First, adjust the volume to a comfortable level and confirm the channel is correct. Then you'll complete 3 short practice trials (not scored) before the real test begins. The gap duration shrinks after three consecutive correct answers, and grows immediately after any incorrect answer; your threshold is estimated from the staircase's reversal points.</p>
       <p>Try to minimize distractions and use headphones for the best experience. This is a two-interval forced-choice task, distinct in design from the single-interval "official" clinical GIN test.</p>
     </section>
 
@@ -229,7 +229,7 @@
 
           <h3>Staircase &amp; threshold estimation</h3>
           <ul>
-              <li>A 1-down/1-up staircase: a correct response shrinks the next gap (harder), an incorrect response (including a wrong guess) grows it (easier).</li>
+              <li>A 3-down/1-up staircase: the gap only shrinks (harder) after three <em>consecutive</em> correct responses; a single incorrect response (including a wrong guess) immediately grows it (easier) and resets the correct streak. This converges on a higher-accuracy point (~79% correct) than a simpler 1-down/1-up rule (~50% correct), giving a more conservative threshold estimate.</li>
               <li>The test stops after 8 reversals (points where the staircase's direction flips).</li>
               <li>Your threshold is estimated as the mean gap duration at the last 6 reversals — the first 2 are discarded, since they reflect the staircase still settling from its starting point rather than steady-state performance.</li>
           </ul>
@@ -245,6 +245,7 @@
     let gapIndex = Math.max(0, gapOptions.indexOf(10));
     let correctInterval = 1;
     let trialCount = 0;
+    let consecutiveCorrect = 0; // 3-down/1-up: tracks the current correct streak
     const results = [];
     const reversals = []; // trial numbers, for chart plotting
     const reversalGaps = []; // gap duration (ms) at each reversal, for thresholding
@@ -466,11 +467,23 @@
       results.push({ trial: trialCount, gapMs, correct: isCorrect });
       chart.data.datasets[isCorrect ? 0 : 1].data.push({ x: trialCount, y: gapMs });
 
-      // direction: 'same' at the floor/ceiling (index clamped) suppresses a
-      // spurious reversal, since the staircase didn't actually move there.
+      // 3-down/1-up: three consecutive correct responses are required before
+      // the gap shrinks (harder); a single incorrect response immediately
+      // grows it (easier) and resets the correct-streak. This converges on
+      // a higher-accuracy point (~79% correct) than a 1-down/1-up staircase
+      // (~50%), which is the standard alternative when a more conservative
+      // threshold estimate is wanted.
       const prevGapIndex = gapIndex;
-      if (isCorrect && gapIndex > 0) gapIndex--;
-      else if (!isCorrect && gapIndex < gapOptions.length - 1) gapIndex++;
+      if (isCorrect) {
+        consecutiveCorrect++;
+        if (consecutiveCorrect >= 3) {
+          if (gapIndex > 0) gapIndex--;
+          consecutiveCorrect = 0;
+        }
+      } else {
+        consecutiveCorrect = 0;
+        if (gapIndex < gapOptions.length - 1) gapIndex++;
+      }
 
       const direction = gapIndex > prevGapIndex ? 'up' : gapIndex < prevGapIndex ? 'down' : 'same';
       if (lastDirection && direction !== lastDirection && direction !== 'same') {
