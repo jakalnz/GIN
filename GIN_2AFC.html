@@ -95,6 +95,15 @@
 
     #status { margin-top: 12px; font-weight: 600; min-height: 1.2em; text-align: center; }
     #calibrationStatus { text-align: center; color: var(--muted); font-size: 0.95rem; }
+
+    /* Explains the consequence of the selected staircase rule */
+    .staircase-info {
+      width: 320px; max-width: 92%; box-sizing: border-box;
+      padding: 10px 14px; border-radius: var(--btn-radius);
+      border: 1px solid var(--card-border); border-left: 4px solid var(--btn-bg);
+      background: #fff; font-size: 0.92rem; line-height: 1.45; text-align: left;
+    }
+    .staircase-info.warn { border-color: #e0a800; border-left-color: #e0a800; background: #fff8e1; }
     /* Chart.js with maintainAspectRatio:false needs an explicitly-sized,
        non-auto-height parent, or the canvas and its container can grow
        each other in a feedback loop. This wrapper provides that fixed height. */
@@ -131,7 +140,7 @@
     <section class="card" aria-label="Instructions">
       <h2>Instructions</h2>
       <p>In each trial, you will hear two intervals of white noise. One of the intervals will contain a brief silent gap. Your task is to identify which interval (first or second) contained the gap. Even if you're not sure, please make your best guess — every trial needs a First or Second answer for the results to be valid.</p>
-      <p>1) Adjust the volume to a comfortable level and confirm the channel is correct. <br>2) Complete 3 short practice trials (not scored) before the real test begins.<br>3) The gap duration shrinks after three consecutive correct answers, and grows immediately after any incorrect answer; your threshold is estimated from the staircase's reversal points.</p>
+      <p>1) Adjust the volume to a comfortable level and confirm the channel is correct. <br>2) Complete 3 short practice trials (not scored) before the real test begins.<br>3) <span id="ruleInstruction">The gap duration shrinks after three consecutive correct answers, and grows immediately after any incorrect answer</span>; your threshold is estimated from the staircase's reversal points.</p>
       <p>Try to minimize distractions and use headphones for the best experience. This is a two-interval forced-choice task, distinct in design from the single-interval "official" clinical GIN test.</p>
     </section>
 
@@ -156,6 +165,12 @@
         <div class="control-row">
           <label class="control-label" for="startGapSelect">Starting gap:</label>
           <select id="startGapSelect" class="styled" aria-label="Starting gap (ms)"></select>
+        </div>
+
+        <div class="control-row">
+          <label class="control-label" for="staircaseSelect">Staircase rule:</label>
+          <select id="staircaseSelect" class="styled" aria-label="Staircase rule" aria-describedby="staircaseInfo"></select>
+          <div id="staircaseInfo" class="staircase-info" aria-live="polite"></div>
         </div>
 
         <button id="calConfirmButton" class="secondary">Confirm Volume &amp; Channel OK</button>
@@ -229,7 +244,14 @@
 
           <h3>Staircase &amp; threshold estimation</h3>
           <ul>
-              <li>A 3-down/1-up staircase: the gap only shrinks (harder) after three <em>consecutive</em> correct responses; a single incorrect response (including a wrong guess) immediately grows it (easier) and resets the correct streak. This converges on a higher-accuracy point (~79% correct) than a simpler 1-down/1-up rule (~50% correct), giving a more conservative threshold estimate.</li>
+              <li>An N-down/1-up staircase: the gap only shrinks (harder) after N <em>consecutive</em> correct responses; a single incorrect response (including a wrong guess) immediately grows it (easier) and resets the correct streak. The choice of N sets the accuracy level the staircase converges on (Levitt, 1971):
+                  <ul>
+                      <li><strong>3-down/1-up</strong> → ~79.4% correct. The most conservative (largest) threshold, and the longest test.</li>
+                      <li><strong>2-down/1-up</strong> → ~70.7% correct. A common middle ground: a slightly smaller threshold and a shorter test.</li>
+                      <li><strong>1-down/1-up</strong> → 50% correct. In a two-interval task, guessing alone already scores 50%, so this rule tracks <em>chance</em> performance. It drifts toward the smallest gaps, and its "threshold" does not measure gap detection. It is included only to show why it is unsuitable for a forced-choice task.</li>
+                  </ul>
+              </li>
+              <li>Selected for this session: <strong id="aboutRule">3-down/1-up</strong>. The rule is locked once calibration is confirmed.</li>
               <li>The test stops after 8 reversals (points where the staircase's direction flips).</li>
               <li>Your threshold is estimated as the mean gap duration at the last 6 reversals — the first 2 are discarded, since they reflect the staircase still settling from its starting point rather than steady-state performance.</li>
           </ul>
@@ -245,7 +267,24 @@
     let gapIndex = Math.max(0, gapOptions.indexOf(10));
     let correctInterval = 1;
     let trialCount = 0;
-    let consecutiveCorrect = 0; // 3-down/1-up: tracks the current correct streak
+    let consecutiveCorrect = 0; // N-down/1-up: tracks the current correct streak
+    // Staircase rules, keyed by N (correct-in-a-row needed to shrink the gap).
+    // Targets are the convergence points from Levitt (1971).
+    const STAIRCASE_RULES = {
+      3: {
+        label: '3-down/1-up', target: '79.4', warn: false, wordN: 'three consecutive correct answers',
+        info: 'The gap gets shorter only after <strong>3 correct answers in a row</strong>. Your threshold will be the gap you detect about <strong>79%</strong> of the time: the most conservative (largest) estimate. It needs the most trials, so the test is longest.'
+      },
+      2: {
+        label: '2-down/1-up', target: '70.7', warn: false, wordN: 'two consecutive correct answers',
+        info: 'The gap gets shorter after <strong>2 correct answers in a row</strong>. Your threshold will be the gap you detect about <strong>71%</strong> of the time: a common middle ground, with a slightly smaller threshold than 3-down/1-up and a shorter test.'
+      },
+      1: {
+        label: '1-down/1-up', target: '50', warn: true, wordN: 'every correct answer',
+        info: '&#9888; The gap gets shorter after <strong>every correct answer</strong>. With two intervals, guessing alone gives <strong>50% correct</strong>, so this rule tracks <em>chance</em> performance. The staircase drifts toward the smallest gaps, and the "threshold" it gives does <strong>NOT</strong> reflect your gap detection. Use it only to see why this rule is unsuitable for a 2-interval task. It is the quickest test.'
+      }
+    };
+    let stepsDown = 3;
     const results = [];
     const reversals = []; // trial numbers, for chart plotting
     const reversalGaps = []; // gap duration (ms) at each reversal, for thresholding
@@ -467,16 +506,15 @@
       results.push({ trial: trialCount, gapMs, correct: isCorrect });
       chart.data.datasets[isCorrect ? 0 : 1].data.push({ x: trialCount, y: gapMs });
 
-      // 3-down/1-up: three consecutive correct responses are required before
-      // the gap shrinks (harder); a single incorrect response immediately
-      // grows it (easier) and resets the correct-streak. This converges on
-      // a higher-accuracy point (~79% correct) than a 1-down/1-up staircase
-      // (~50%), which is the standard alternative when a more conservative
-      // threshold estimate is wanted.
+      // N-down/1-up (N = stepsDown, chosen at setup): N consecutive correct
+      // responses are required before the gap shrinks (harder); a single
+      // incorrect response immediately grows it (easier) and resets the
+      // correct-streak. Larger N converges on a higher-accuracy point
+      // (see STAIRCASE_RULES).
       const prevGapIndex = gapIndex;
       if (isCorrect) {
         consecutiveCorrect++;
-        if (consecutiveCorrect >= 3) {
+        if (consecutiveCorrect >= stepsDown) {
           if (gapIndex > 0) gapIndex--;
           consecutiveCorrect = 0;
         }
@@ -520,8 +558,10 @@
 
     function estimateThreshold() {
       const result = computeThreshold();
+      const rule = STAIRCASE_RULES[stepsDown];
       if (result) {
-        status.textContent += ` Estimated threshold: ${result.avg.toFixed(2)} ms (mean of last ${result.count} reversals, after discarding the first ${DISCARD_FIRST_REVERSALS})`;
+        status.textContent += ` Estimated threshold: ${result.avg.toFixed(2)} ms (${rule.label}, ≈${rule.target}% correct point; mean of last ${result.count} reversals, after discarding the first ${DISCARD_FIRST_REVERSALS})`;
+        if (rule.warn) status.textContent += ' — chance-level rule, not a valid gap-detection threshold.';
       } else {
         status.textContent += ' Not enough reversals to estimate threshold.';
       }
@@ -534,6 +574,8 @@
         csv += `${r.trial},${r.gapMs},${r.correct},${earMode},${volumePercent}\n`;
       });
       csv += `\nReversals (ms),${reversalGaps.join(' ')}\n`;
+      const rule = STAIRCASE_RULES[stepsDown];
+      csv += `Staircase Rule,${rule.label},Target % correct,${rule.target}\n`;
       const result = computeThreshold();
       if (result) {
         csv += `Estimated Threshold (ms),${result.avg.toFixed(2)},based on last ${result.count} reversals (first ${DISCARD_FIRST_REVERSALS} discarded)\n`;
@@ -572,6 +614,32 @@
       });
     })();
 
+    // populate staircaseSelect from STAIRCASE_RULES and show the consequence
+    // of the selected rule (info panel, instructions, About dialog)
+    (function initStaircaseSelect(){
+      const sel = document.getElementById('staircaseSelect');
+      const info = document.getElementById('staircaseInfo');
+      [3, 2, 1].forEach(n => {
+        const r = STAIRCASE_RULES[n];
+        const opt = document.createElement('option');
+        opt.value = String(n);
+        opt.text = `${r.label} (≈${Math.round(r.target)}% correct${r.warn ? ', chance level' : ''})`;
+        sel.appendChild(opt);
+      });
+      function applyRule() {
+        stepsDown = Number(sel.value);
+        const r = STAIRCASE_RULES[stepsDown];
+        info.innerHTML = r.info;
+        info.classList.toggle('warn', r.warn);
+        document.getElementById('ruleInstruction').textContent =
+          `The gap duration shrinks after ${r.wordN}, and grows immediately after any incorrect answer`;
+        document.getElementById('aboutRule').textContent = `${r.label} (≈${r.target}% correct)`;
+      }
+      sel.value = '3';
+      applyRule();
+      sel.addEventListener('change', applyRule);
+    })();
+
     // Set up ear mode selector
     const calibrationStatusEl = document.getElementById('calibrationStatus');
     function setCalibrationConfirmed(value) {
@@ -583,6 +651,9 @@
       // lock it once the test is underway so it can't be changed mid-run
       // (which would silently reset the staircase's current position).
       document.getElementById('startGapSelect').disabled = value;
+      // Same for the staircase rule: changing it mid-run would mix reversals
+      // from different convergence targets.
+      document.getElementById('staircaseSelect').disabled = value;
     }
 
     (function initEarSelect(){
