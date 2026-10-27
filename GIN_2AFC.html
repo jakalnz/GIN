@@ -129,6 +129,13 @@
     .check-row { display: flex; align-items: center; gap: 10px; font-weight: 600; cursor: pointer; }
     .check-row input { width: 22px; height: 22px; }
 
+    /* Threshold + sensation-level setup */
+    .sl-block { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; }
+    .sl-help { font-size: 0.92rem; line-height: 1.5; text-align: left; margin: 0; }
+    .sl-run { font-weight: 600; text-align: center; min-height: 1.2em; }
+    .fine-buttons { display: flex; gap: 10px; justify-content: center; }
+    button.tiny { width: 120px; min-height: 48px; font-size: 16px; }
+
     /* Teaching panels */
     details.teach { width: 100%; box-sizing: border-box; background: #fff; border: 1px solid var(--card-border); border-radius: var(--btn-radius); padding: 10px 14px; }
     details.teach summary { cursor: pointer; font-weight: 600; text-align: center; }
@@ -162,11 +169,24 @@
       <p class="subtitle"><span id="modeSubtitle">Gaps-in-Noise</span> — Two-Interval Forced-Choice Version (touch friendly)</p>
     </header>
 
+    <section class="card" aria-label="Test type">
+      <div class="controls">
+        <div class="control-row">
+          <label class="control-label" for="modeSelect">Test type:</label>
+          <select id="modeSelect" class="styled" autocomplete="off" aria-label="Test type">
+            <option value="gap">Gap Detection (Gaps-in-Noise)</option>
+            <option value="freq">Frequency Discrimination</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
     <section class="card" aria-label="Instructions">
       <h2>Instructions</h2>
       <p id="taskInstruction"></p>
-      <p>1) Check your audio setup (below), adjust the volume to a comfortable level and confirm the channel is correct. <br>2) Complete 3 short practice trials (not scored) before the real test begins.<br>3) <span id="ruleInstruction"></span>; your threshold is estimated from the staircase's reversal points.</p>
+      <p>1) Check your audio setup (below), set the test level (from your just-audible threshold, or a comfortable volume) and confirm the channel is correct. <br>2) Complete 3 short practice trials (not scored) before the real test begins.<br>3) <span id="ruleInstruction"></span>; your threshold is estimated from the staircase's reversal points.</p>
       <p>Try to minimize distractions and use wired headphones. <span id="modeDisclaimer"></span></p>
+      <p>For how this test works and why it is designed this way, see <a href="#" id="aboutLink" aria-haspopup="dialog">About This Procedure</a>.</p>
     </section>
 
     <section class="card hw" aria-label="Audio hardware checklist">
@@ -183,14 +203,6 @@
     <section class="card" aria-label="Setup and calibration">
       <h2>Setup &amp; Calibration</h2>
       <div class="controls" role="group" aria-label="Calibration controls">
-        <div class="control-row">
-          <label class="control-label" for="modeSelect">Test type:</label>
-          <select id="modeSelect" class="styled" autocomplete="off" aria-label="Test type">
-            <option value="gap">Gap Detection (Gaps-in-Noise)</option>
-            <option value="freq">Frequency Discrimination</option>
-          </select>
-        </div>
-
         <div class="control-row">
           <label class="control-label" for="earSelect">Channel:</label>
           <select id="earSelect" class="styled" autocomplete="off" aria-label="Audio channel selection">
@@ -212,9 +224,51 @@
         </div>
 
         <div class="control-row">
+          <label class="control-label" for="levelMethodSelect">Presentation level:</label>
+          <select id="levelMethodSelect" class="styled" autocomplete="off" aria-label="Presentation level method" aria-describedby="levelMethodInfo">
+            <option value="sl">Threshold + sensation level (dB SL)</option>
+            <option value="comfort">Comfortable level (volume slider)</option>
+          </select>
+          <div id="levelMethodInfo" class="staircase-info"></div>
+        </div>
+
+        <div class="control-row" id="comfortLevelBlock">
           <label class="control-label" for="volumeSlider">Volume</label>
           <input type="range" id="volumeSlider" min="0" max="100" value="10" style="width: 260px;">
         </div>
+
+        <div class="sl-block" id="slLevelBlock">
+          <p class="sl-help">Set your <strong>system volume</strong> to a moderate level first, and don't change it afterwards. Then find the level where the pulses are <strong>only just audible</strong>, in 4 short runs: alternately turning the sound up from silence and down from clearly audible. Each time, stop when you can <em>only just</em> hear the pulses and press "Just Audible".</p>
+          <button id="thrStartButton" class="secondary">Start Threshold Measurement</button>
+          <div id="thrRunLabel" class="sl-run" aria-live="polite"></div>
+          <input type="range" id="thrSlider" min="0" max="100" step="1" value="0" style="width: 260px;" disabled aria-label="Level for just-audible adjustment">
+          <div class="fine-buttons">
+            <button id="thrDown" class="secondary tiny" disabled>&minus;1 dB</button>
+            <button id="thrUp" class="secondary tiny" disabled>+1 dB</button>
+          </div>
+          <button id="thrMarkButton" disabled>Just Audible</button>
+          <div id="thrResult" class="staircase-info" style="display:none;" aria-live="polite"></div>
+          <label class="control-label" for="slSelect">Test level:</label>
+          <select id="slSelect" class="styled" autocomplete="off" aria-label="Sensation level" aria-describedby="slInfo">
+            <option value="40">40 dB SL</option>
+            <option value="50">50 dB SL</option>
+            <option value="60">60 dB SL</option>
+          </select>
+          <div id="slInfo" class="staircase-info"></div>
+          <details class="teach">
+            <summary>Why set the level from your own threshold?</summary>
+            <ul>
+              <li><strong>Sensation level (dB SL)</strong> is how many dB a sound is above <em>your</em> threshold for that sound, on <em>this</em> equipment. Your threshold absorbs headphone sensitivity, system volume and sound-card gain, so listeners on different setups hear the test at a similar audibility. The clinical GIN test is presented at 50 dB SL.</li>
+              <li>For frequency discrimination the threshold is measured with the standard tone, so it also allows for your headphones' response at that frequency.</li>
+              <li><strong>Method of adjustment.</strong> You control the level yourself. It is quick, but where you stop depends on how cautious you are (your "criterion"), unlike the forced-choice task, where guessing is built in.</li>
+              <li><strong>Up and down runs.</strong> Turning up from silence and turning down from audible typically end at slightly different levels; averaging both directions cancels much of that difference.</li>
+              <li><strong>Hidden offset.</strong> The slider's position means a different level on every run, so you can't just return to the same spot.</li>
+              <li><strong>Pulsed sound.</strong> Pulses are easier to detect than a steady sound, which the auditory system adapts to.</li>
+              <li><strong>Limits.</strong> This standardizes audibility, not sound pressure level (dB SPL). With a hearing loss, a given dB SL is louder in absolute terms. Room noise raises the measured threshold. If your system volume is very high, your threshold falls near the sound card's digital noise floor (about &minus;96 dB for 16-bit audio).</li>
+            </ul>
+          </details>
+        </div>
+
         <button id="calNoiseButton" class="secondary">Play Calibration Noise</button>
 
         <div class="control-row">
@@ -318,7 +372,13 @@
           <h3>Audio hardware &amp; volume calibration</h3>
           <ul>
               <li>The audio-setup checklist must be ticked before calibration can be confirmed. A web browser cannot reliably tell whether the output is Bluetooth or whether the sound card is processing the audio, so this relies on you checking.</li>
-              <li>Before any scored trial, you must play the calibration sound (noise for gap detection; a pulsed tone at the standard frequency for frequency discrimination), adjust the volume slider to a comfortable level, and confirm it sounds correct for the selected channel.</li>
+              <li>The test level is set in one of two ways:
+                  <ul>
+                      <li><strong>Threshold + sensation level (recommended).</strong> You find the just-audible level of the test sound by adjustment (4 alternating up/down runs, averaged, with a hidden random slider offset on each run). The test then plays 40, 50 or 60 dB above that threshold. Levels that would exceed the sound card's full scale are not offered. Changing the test type, standard frequency or channel requires measuring the threshold again.</li>
+                      <li><strong>Comfortable level.</strong> You play the calibration sound (noise for gap detection; a pulsed tone at the standard frequency for frequency discrimination) and adjust the volume slider to a comfortable level.</li>
+                  </ul>
+              </li>
+              <li>Either way, you confirm the sound is correct for the selected channel before the test starts.</li>
               <li>Play Trial and the response buttons are disabled (gated) until calibration is confirmed.</li>
               <li>This standardizes relative comfort and verifies correct ear routing — it does <em>not</em> measure absolute sound pressure level (dB SPL), which depends on your specific headphones/speakers and device volume.</li>
           </ul>
@@ -485,6 +545,15 @@
           };
         },
         calibrationBuffer: () => createNoiseBuffer(2), // 2s loopable buffer, no gap
+        // Pulsed noise (on 400 ms, off 500 ms) for the just-audible threshold
+        thresholdBuffer() {
+          const sampleRate = audioCtx.sampleRate;
+          const buffer = audioCtx.createBuffer(2, Math.floor(sampleRate * (TONE_DURATION_SEC + TONE_ISI_SEC)), sampleRate);
+          const onLen = Math.floor(sampleRate * TONE_DURATION_SEC);
+          const rampLen = Math.floor(sampleRate * TONE_RAMP_MS / 1000);
+          fillStereo(buffer, i => i < onLen ? (Math.random() * 2 - 1) * raisedCosineEnvelope(i, onLen, rampLen) : 0);
+          return buffer;
+        },
         yScale: () => ({ type: 'linear', title: { display: true, text: 'Gap Duration (ms)' }, min: 0, max: 22 }),
         tooltip: p => `Trial ${p.x}: ${p.y} ms`,
         csvHeader: 'Mode,Trial,Gap(ms),Response,Channel,Volume (%)',
@@ -539,6 +608,7 @@
           for (let ch = 0; ch < 2; ch++) buffer.getChannelData(ch).set(tone.getChannelData(ch));
           return buffer;
         },
+        thresholdBuffer() { return this.calibrationBuffer(); },
         yScale: () => ({
           type: 'logarithmic',
           title: { display: true, text: 'Δf (% of standard frequency)' },
@@ -665,13 +735,16 @@
       const amp = TONE_AMPLITUDE * Math.pow(10, gainDb / 20);
       const rampLen = Math.floor(sampleRate * TONE_RAMP_MS / 1000);
       const phase = 2 * Math.PI * freqHz / sampleRate;
-      fillStereo(buffer, i => {
-        let env = 1;
-        if (i < rampLen) env = 0.5 * (1 - Math.cos(Math.PI * i / rampLen));
-        else if (i >= length - rampLen) env = 0.5 * (1 - Math.cos(Math.PI * (length - 1 - i) / rampLen));
-        return amp * env * Math.sin(phase * i);
-      });
+      fillStereo(buffer, i => amp * raisedCosineEnvelope(i, length, rampLen) * Math.sin(phase * i));
       return buffer;
+    }
+
+    // Smooth (raised-cosine) fade-in over the first rampLen samples and
+    // fade-out over the last rampLen samples of a sound `length` samples long.
+    function raisedCosineEnvelope(i, length, rampLen) {
+      if (i < rampLen) return 0.5 * (1 - Math.cos(Math.PI * i / rampLen));
+      if (i >= length - rampLen) return 0.5 * (1 - Math.cos(Math.PI * (length - 1 - i) / rampLen));
+      return 1;
     }
 
     function playBuffer(buffer, delay = 0) {
@@ -882,7 +955,7 @@
       if (result) {
         status.textContent += ` Estimated threshold: ${m.thresholdText(result)} (${rule.label}, ≈${rule.target}% correct point; ${meanWord} of last ${result.count} reversals, after discarding the first ${m.discard})`;
         if (rule.warn) status.textContent += ' — chance-level rule, not a valid threshold.';
-        resultNote.textContent = `${m.reference()} Your ${rule.label} threshold is the ≈${rule.target}%-correct point (≈${rule.corrected}% after correcting for guessing); studies using a different target will give somewhat different values.`;
+        resultNote.textContent = `Presented at ${levelText()}. ${m.reference()} Your ${rule.label} threshold is the ≈${rule.target}%-correct point (≈${rule.corrected}% after correcting for guessing); studies using a different target will give somewhat different values.`;
         resultNote.style.display = 'block';
       } else {
         status.textContent += ' Not enough reversals to estimate threshold.';
@@ -891,7 +964,7 @@
 
     function exportResults() {
       const m = mode();
-      const volumePercent = document.getElementById('volumeSlider').value;
+      const volumePercent = levelMethod === 'comfort' ? volumeSlider.value : 'n/a (SL)';
       let csv = m.csvHeader + "\n";
       results.forEach(r => { csv += m.csvRow(r, volumePercent) + "\n"; });
       const unit = testMode === 'freq' ? '(% of standard)' : '(ms)';
@@ -908,6 +981,12 @@
         } else {
           csv += `Estimated Threshold (ms),${result.avg.toFixed(2)},${meanWord} last ${result.count} reversals (first ${m.discard} discarded)\n`;
         }
+      }
+      if (levelMethod === 'sl' && thr.value !== null) {
+        const sl = Number(slSelect.value);
+        csv += `Presentation level,${sl} dB SL,Threshold (dB re full scale),${thr.value.toFixed(1)},Threshold runs (dB),${thr.marks.map(v => v.toFixed(1)).join(' ')},Test level (dB re full scale),${(thr.value + sl).toFixed(1)}\n`;
+      } else {
+        csv += `Presentation level,Comfortable level (volume slider),${volumeSlider.value}%\n`;
       }
       csv += `Reference,"${m.reference().replace(/"/g, '""')}"\n`;
       // BOM so Excel reads the Δ/≈ characters as UTF-8
@@ -957,6 +1036,7 @@
       sel.addEventListener('change', (e) => {
         standardHz = Number(e.target.value);
         stopCalibrationSound(); // the calibration tone is at the old frequency
+        invalidateThreshold('Standard frequency changed — measure your threshold again.');
         updateHwInfo();
       });
     })();
@@ -1074,6 +1154,8 @@
       });
       applyRule();
       resetState();
+      slSelect.value = String(SL_DEFAULTS[testMode]);
+      invalidateThreshold('Test type changed — measure your threshold again.');
       updateHwInfo();
     }
     modeSelect.addEventListener('change', applyMode);
@@ -1093,6 +1175,10 @@
       document.getElementById('startGapSelect').disabled = value;
       document.getElementById('standardFreqSelect').disabled = value;
       staircaseSelect.disabled = value;
+      // The presentation level is part of the setup too.
+      levelMethodSelect.disabled = value;
+      thrStartButton.disabled = value;
+      slSelect.disabled = value || thr.value === null;
     }
 
     (function initEarSelect(){
@@ -1101,15 +1187,14 @@
         earMode = e.target.value;
         stopCalibrationSound();
         setCalibrationConfirmed(false);
+        invalidateThreshold('Channel changed — measure your threshold again.');
         calibrationStatusEl.textContent = 'Channel changed — please reconfirm volume and channel before continuing.';
       });
     })();
 
     // Volume slider: live-update master gain
     const volumeSlider = document.getElementById('volumeSlider');
-    volumeSlider.addEventListener('input', (e) => {
-      masterGainNode.gain.value = e.target.value / 100;
-    });
+    volumeSlider.addEventListener('input', applyLevel);
 
     // Hardware hints: what the browser reports. It can't identify Bluetooth
     // or sound-card processing, so these are heuristics only.
@@ -1135,7 +1220,14 @@
         calibrationSource.stop();
         calibrationSource = null;
       }
-      calNoiseButton.textContent = `Play ${mode().calLabel}`;
+      calNoiseButton.textContent = calButtonText(false);
+    }
+
+    // With a threshold-based level the calibration button previews the
+    // actual test level; otherwise it plays the sound used to set comfort.
+    function calButtonText(playing) {
+      if (levelMethod === 'sl') return playing ? 'Stop Test Level Preview' : 'Preview Test Level';
+      return `${playing ? 'Stop' : 'Play'} ${mode().calLabel}`;
     }
 
     // Calibration sound: continuous gapless noise (gap mode) or a pulsed
@@ -1153,22 +1245,217 @@
       source.connect(masterGainNode);
       source.start();
       calibrationSource = source;
-      calNoiseButton.textContent = `Stop ${mode().calLabel}`;
+      calNoiseButton.textContent = calButtonText(true);
       setTimeout(updateHwInfo, 500); // output latency is only reported once audio runs
     });
 
-    hwCheck.addEventListener('change', () => {
-      calConfirmButton.disabled = !hwCheck.checked;
-    });
+    // Presentation level by threshold + sensation level: the listener finds
+    // the just-audible level of the test sound on their own equipment
+    // (method of adjustment: alternating up/down runs, averaged, with a
+    // hidden random slider offset per run), then the test plays SL dB above
+    // it. Levels are in dB relative to the test sound at full gain (0 dB =
+    // master gain 1, the most the sound card can take without clipping).
+    const THR_RUNS = ['up', 'down', 'up', 'down'];
+    const THR_SLIDER_SPAN_DB = 115; // slider 0 ≈ −115 dB, slider 100 ≈ 0 dB (before the offset)
+    const THR_MAX_OFFSET_DB = 15;
+    const THR_DESCEND_START_DB = -40; // clearly audible on most setups, not loud
+    const THR_SPREAD_WARN_DB = 10;
+    const DIGITAL_FLOOR_DB = -90; // close to the 16-bit noise floor (≈ −96 dB)
+    const SL_DEFAULTS = { gap: 50, freq: 40 }; // clinical GIN uses 50 dB SL
+    const SL_LOUD_WARN = 60;
+    let levelMethod = 'sl';
+    const thr = { run: -1, offset: 0, marks: [], value: null, source: null, gain: null };
+
+    const levelMethodSelect = document.getElementById('levelMethodSelect');
+    const thrSlider = document.getElementById('thrSlider');
+    const thrStartButton = document.getElementById('thrStartButton');
+    const thrMarkButton = document.getElementById('thrMarkButton');
+    const thrUp = document.getElementById('thrUp');
+    const thrDown = document.getElementById('thrDown');
+    const thrRunLabel = document.getElementById('thrRunLabel');
+    const thrResult = document.getElementById('thrResult');
+    const slSelect = document.getElementById('slSelect');
+    const slInfo = document.getElementById('slInfo');
+
+    const dbToGain = db => Math.pow(10, db / 20);
+    const thrSliderDb = () => Math.min(0, Number(thrSlider.value) - THR_SLIDER_SPAN_DB + thr.offset);
+
+    function applyThrGain() {
+      if (thr.gain) thr.gain.gain.setValueAtTime(dbToGain(thrSliderDb()), audioCtx.currentTime);
+    }
+
+    function setThrControlsEnabled(on) {
+      thrSlider.disabled = !on;
+      thrUp.disabled = !on;
+      thrDown.disabled = !on;
+      thrMarkButton.disabled = !on;
+    }
+
+    function stopThrSound() {
+      if (thr.source) {
+        thr.source.stop();
+        thr.source = null;
+      }
+    }
+
+    // New random offset each run, so the slider position can't be reused.
+    function beginThrRun() {
+      thr.offset = Math.random() * THR_MAX_OFFSET_DB;
+      const up = THR_RUNS[thr.run] === 'up';
+      const start = up
+        ? Math.floor(Math.random() * 4)
+        : Math.round(THR_DESCEND_START_DB + THR_SLIDER_SPAN_DB - thr.offset + (Math.random() * 6 - 3));
+      thrSlider.value = String(start);
+      applyThrGain();
+      thrRunLabel.textContent = up
+        ? `Run ${thr.run + 1} of ${THR_RUNS.length}: starting silent — turn UP slowly until you can only just hear the pulses.`
+        : `Run ${thr.run + 1} of ${THR_RUNS.length}: starting clearly audible — turn DOWN slowly until the pulses are only just audible.`;
+    }
+
+    async function startThreshold() {
+      if (audioCtx.state === 'suspended') await audioCtx.resume().catch(() => {});
+      stopCalibrationSound();
+      stopThrSound();
+      thr.value = null;
+      thr.marks = [];
+      thr.run = 0;
+      if (!thr.gain) {
+        thr.gain = audioCtx.createGain();
+        thr.gain.connect(audioCtx.destination);
+      }
+      beginThrRun(); // sets the gain before the sound starts
+      const source = audioCtx.createBufferSource();
+      source.buffer = mode().thresholdBuffer();
+      source.loop = true;
+      source.connect(thr.gain);
+      source.start();
+      thr.source = source;
+      setThrControlsEnabled(true);
+      thrStartButton.textContent = 'Restart Threshold Measurement';
+      updateSlOptions();
+    }
+
+    function markJustAudible() {
+      if (thr.run < 0) return;
+      thr.marks.push(thrSliderDb());
+      thr.run++;
+      if (thr.run < THR_RUNS.length) {
+        beginThrRun();
+        return;
+      }
+      stopThrSound();
+      setThrControlsEnabled(false);
+      thr.run = -1;
+      thr.value = thr.marks.reduce((sum, v) => sum + v, 0) / thr.marks.length;
+      thrRunLabel.textContent = 'Threshold measured.';
+      updateSlOptions();
+    }
+
+    // A threshold only holds for the sound, frequency and ear it was measured with.
+    function invalidateThreshold(reason) {
+      const had = thr.value !== null || thr.run >= 0;
+      stopThrSound();
+      setThrControlsEnabled(false);
+      thr.run = -1;
+      thr.value = null;
+      thr.marks = [];
+      thrStartButton.textContent = 'Start Threshold Measurement';
+      thrRunLabel.textContent = had ? reason : '';
+      updateSlOptions();
+    }
+
+    // Offer only the sensation levels that fit below full scale.
+    function updateSlOptions() {
+      const T = thr.value;
+      const fits = sl => T !== null && T + sl <= 0;
+      [...slSelect.options].forEach(o => {
+        const sl = Number(o.value);
+        o.disabled = T !== null && !fits(sl);
+        o.text = `${sl} dB SL${sl === SL_DEFAULTS[testMode] ? ' (default)' : ''}${o.disabled ? ' — too loud for this setup' : ''}`;
+      });
+      if (T === null) {
+        thrResult.style.display = 'none';
+      } else {
+        const available = [...slSelect.options].map(o => Number(o.value)).filter(fits);
+        if (!fits(Number(slSelect.value)) && available.length) {
+          const preferred = SL_DEFAULTS[testMode];
+          slSelect.value = String(available.includes(preferred) ? preferred : available[available.length - 1]);
+        }
+        const spread = Math.max(...thr.marks) - Math.min(...thr.marks);
+        const flags = [];
+        if (spread > THR_SPREAD_WARN_DB) flags.push(`Your runs differ by more than ${THR_SPREAD_WARN_DB} dB — consider measuring again.`);
+        if (T < DIGITAL_FLOOR_DB) flags.push('This is very low: your system volume is probably high, so the threshold sits near the sound card\'s digital noise floor. Turn the system volume down and measure again.');
+        if (!available.length) flags.push('Even 40 dB SL would exceed the sound card\'s full scale. Turn the system volume up and measure again.');
+        thrResult.innerHTML = `Your just-audible level: <strong>${T.toFixed(1)} dB</strong> re full scale (mean of ${thr.marks.length} runs, spread ${spread.toFixed(1)} dB).`
+          + flags.map(f => `<br>&#9888; ${f}`).join('');
+        thrResult.classList.toggle('warn', flags.length > 0);
+        thrResult.style.display = 'block';
+      }
+      slSelect.disabled = calibrationConfirmed || T === null;
+      applyLevel();
+    }
+
+    const slReady = () => thr.value !== null && thr.value + Number(slSelect.value) <= 0;
+
+    function levelText() {
+      if (levelMethod === 'comfort') return `volume slider ${volumeSlider.value}%`;
+      const sl = Number(slSelect.value);
+      return `${sl} dB SL (threshold ${thr.value.toFixed(1)} dB re full scale, test level ${(thr.value + sl).toFixed(1)} dB)`;
+    }
+
+    // Sets the master gain from the chosen method, and what the setup
+    // controls allow as a result.
+    function applyLevel() {
+      if (levelMethod === 'sl' && slReady()) {
+        const sl = Number(slSelect.value);
+        const db = thr.value + sl;
+        masterGainNode.gain.value = dbToGain(db);
+        slInfo.innerHTML = `The test will play <strong>${sl} dB above your threshold</strong> (${db.toFixed(1)} dB re full scale).`
+          + (sl >= SL_LOUD_WARN ? ' &#9888; This can be loud on some setups: preview it first, and choose a lower level if it is uncomfortable.' : '');
+        slInfo.classList.toggle('warn', sl >= SL_LOUD_WARN);
+      } else {
+        masterGainNode.gain.value = volumeSlider.value / 100;
+        slInfo.textContent = thr.value === null
+          ? 'Measure your just-audible level first.'
+          : 'No sensation level fits on this setup — see above.';
+        slInfo.classList.remove('warn');
+      }
+      const needsThreshold = levelMethod === 'sl' && !slReady();
+      calNoiseButton.disabled = needsThreshold;
+      calConfirmButton.disabled = !hwCheck.checked || needsThreshold;
+    }
+
+    function applyLevelMethod() {
+      levelMethod = levelMethodSelect.value;
+      if (thr.run >= 0) invalidateThreshold('Threshold measurement stopped.');
+      stopCalibrationSound();
+      document.getElementById('comfortLevelBlock').style.display = levelMethod === 'comfort' ? '' : 'none';
+      document.getElementById('slLevelBlock').style.display = levelMethod === 'sl' ? '' : 'none';
+      document.getElementById('levelMethodInfo').textContent = levelMethod === 'sl'
+        ? 'Recommended. You find the quietest level you can hear on your own equipment, and the test plays a fixed number of dB above it (the sensation level). Listeners on different headphones and volume settings then hear the test at a similar audibility.'
+        : 'You pick a comfortable level by ear. Quick, but the actual level depends on your headphones and system volume, so results are less comparable between setups.';
+      calNoiseButton.textContent = calButtonText(false);
+      applyLevel();
+    }
+
+    levelMethodSelect.addEventListener('change', applyLevelMethod);
+    slSelect.addEventListener('change', applyLevel);
+    thrStartButton.addEventListener('click', startThreshold);
+    thrMarkButton.addEventListener('click', markJustAudible);
+    thrSlider.addEventListener('input', applyThrGain);
+    thrUp.addEventListener('click', () => { thrSlider.value = String(Number(thrSlider.value) + 1); applyThrGain(); });
+    thrDown.addEventListener('click', () => { thrSlider.value = String(Number(thrSlider.value) - 1); applyThrGain(); });
+
+    hwCheck.addEventListener('change', applyLevel);
 
     // Confirm calibration: gates the main test controls, then starts the practice block
     calConfirmButton.addEventListener('click', () => {
-      if (!hwCheck.checked) return;
+      if (!hwCheck.checked || (levelMethod === 'sl' && !slReady())) return;
       stopCalibrationSound();
       setCalibrationConfirmed(true);
       const freqNote = testMode === 'freq' ? `, Standard: ${standardHz} Hz` : '';
       calibrationStatusEl.textContent =
-        `Calibration confirmed (Volume: ${volumeSlider.value}%, Channel: ${earMode}${freqNote}). A short practice round starts now.`;
+        `Calibration confirmed (Level: ${levelText()}, Channel: ${earMode}${freqNote}). A short practice round starts now.`;
       startPractice();
     });
 
@@ -1186,6 +1473,11 @@
     function openAbout() { aboutOverlay.style.display = 'block'; }
     function closeAbout() { aboutOverlay.style.display = 'none'; }
     document.getElementById('aboutBtn').addEventListener('click', openAbout);
+    document.getElementById('aboutLink').addEventListener('click', (e) => {
+      e.preventDefault();
+      e.currentTarget.blur(); // keep keyboard shortcuts working after the dialog closes
+      openAbout();
+    });
     document.getElementById('aboutCloseButton').addEventListener('click', closeAbout);
     aboutOverlay.addEventListener('click', (e) => {
       if (e.target === aboutOverlay) closeAbout();
@@ -1231,6 +1523,7 @@
     });
 
     applyMode();
+    applyLevelMethod();
   </script>
 </body>
 </html>
