@@ -2,19 +2,23 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>GIN Two-Interval Forced-Choice Test</title>
- 
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gap &amp; Frequency Discrimination (2AFC)</title>
+
   <script src='https://cdn.jsdelivr.net/npm/chart.js'></script>
   <style>
     :root{
       --btn-bg: #0078D4;
       --btn-secondary: #6c757d;
+      --btn-warn: #d9534f;
       --btn-radius: 12px;
       --touch-min: 56px;
       --card-bg: #f7f8fa;
       --card-border: #e2e5ea;
       --text-color: #1f2430;
       --muted: #5b6472;
+      --warn-border: #e0a800;
+      --warn-bg: #fff8e1;
     }
 
     html,body { height:100%; }
@@ -68,6 +72,7 @@
     }
 
     button.secondary { background: var(--btn-secondary); }
+    button.warn { background: var(--btn-warn); }
     button:disabled { background: #b9bec2; color: #eee; box-shadow: none; opacity: 0.7; }
     select.styled:disabled { background: #b9bec2; color: #eee; box-shadow: none; opacity: 0.7; }
     button.small { width: 150px; min-height:48px; font-size:16px; }
@@ -103,16 +108,36 @@
       border: 1px solid var(--card-border); border-left: 4px solid var(--btn-bg);
       background: #fff; font-size: 0.92rem; line-height: 1.45; text-align: left;
     }
-    .staircase-info.warn { border-color: #e0a800; border-left-color: #e0a800; background: #fff8e1; }
+    .staircase-info.warn { border-color: var(--warn-border); border-left-color: var(--warn-border); background: var(--warn-bg); }
     /* Chart.js with maintainAspectRatio:false needs an explicitly-sized,
        non-auto-height parent, or the canvas and its container can grow
        each other in a feedback loop. This wrapper provides that fixed height. */
     .chart-wrap { position: relative; width: 100%; height: 320px; }
     .chart-wrap canvas { width: 100% !important; height: 100% !important; }
+    .chart-wrap.small { height: 300px; }
 
     .control-row { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-bottom: 4px; }
     .control-label { font-weight: 600; font-size: 16px; }
     .card-divider { border: none; border-top: 1px solid var(--card-border); margin: 16px 0; }
+
+    /* Hardware checklist: shown before calibration, gates the confirm button */
+    .card.hw { background: var(--warn-bg); border-color: var(--warn-border); }
+    .card.hw ul { margin: 0 0 10px; padding-left: 20px; line-height: 1.5; text-align: left; }
+    .card.hw li { margin-bottom: 6px; }
+    #hwInfo { font-size: 0.9rem; color: var(--muted); margin: 8px 0 10px; }
+    #hwInfo .flag { color: #a15c00; font-weight: 600; }
+    .check-row { display: flex; align-items: center; gap: 10px; font-weight: 600; cursor: pointer; }
+    .check-row input { width: 22px; height: 22px; }
+
+    /* Teaching panels */
+    details.teach { width: 100%; box-sizing: border-box; background: #fff; border: 1px solid var(--card-border); border-radius: var(--btn-radius); padding: 10px 14px; }
+    details.teach summary { cursor: pointer; font-weight: 600; text-align: center; }
+    details.teach p, details.teach li { font-size: 0.92rem; line-height: 1.5; text-align: left; }
+    details.teach ul { padding-left: 20px; }
+
+    #narration { text-align: center; font-size: 0.95rem; min-height: 1.2em; color: var(--text-color); }
+    #progress { text-align: center; font-size: 0.9rem; color: var(--muted); }
+    #resultNote { width: 100%; max-width: 100%; display: none; }
 
     /* Shown only on devices likely to have a physical keyboard (desktop with
        a mouse/trackpad) — touchscreens typically report pointer:coarse and
@@ -133,27 +158,57 @@
 <body>
   <div class="page">
     <header class="page-header">
-      <h1>Gaps-in-Noise Test</h1>
-      <p class="subtitle">Two-Interval Forced-Choice Version (touch friendly)</p>
+      <h1>Gap &amp; Frequency Discrimination</h1>
+      <p class="subtitle"><span id="modeSubtitle">Gaps-in-Noise</span> — Two-Interval Forced-Choice Version (touch friendly)</p>
     </header>
 
     <section class="card" aria-label="Instructions">
       <h2>Instructions</h2>
-      <p>In each trial, you will hear two intervals of white noise. One of the intervals will contain a brief silent gap. Your task is to identify which interval (first or second) contained the gap. Even if you're not sure, please make your best guess — every trial needs a First or Second answer for the results to be valid.</p>
-      <p>1) Adjust the volume to a comfortable level and confirm the channel is correct. <br>2) Complete 3 short practice trials (not scored) before the real test begins.<br>3) <span id="ruleInstruction">The gap duration shrinks after three consecutive correct answers, and grows immediately after any incorrect answer</span>; your threshold is estimated from the staircase's reversal points.</p>
-      <p>Try to minimize distractions and use headphones for the best experience. This is a two-interval forced-choice task, distinct in design from the single-interval "official" clinical GIN test.</p>
+      <p id="taskInstruction"></p>
+      <p>1) Check your audio setup (below), adjust the volume to a comfortable level and confirm the channel is correct. <br>2) Complete 3 short practice trials (not scored) before the real test begins.<br>3) <span id="ruleInstruction"></span>; your threshold is estimated from the staircase's reversal points.</p>
+      <p>Try to minimize distractions and use wired headphones. <span id="modeDisclaimer"></span></p>
+    </section>
+
+    <section class="card hw" aria-label="Audio hardware checklist">
+      <h2>&#9888; Before you start: check your audio setup</h2>
+      <ul>
+        <li><strong>Use wired headphones — not Bluetooth.</strong> Bluetooth compresses the audio (SBC/AAC codecs), which can smear or fill short gaps. Noise cancelling and automatic gain change what reaches your ear. A headset whose microphone is in use drops to a low-quality "hands-free" mode that removes high frequencies. Power-saving can cut off the first part of each sound.</li>
+        <li><strong>Turn off sound processing.</strong> Windows: Settings &rsaquo; Sound &rsaquo; your device &rsaquo; Audio enhancements <em>Off</em>, Spatial sound <em>Off</em>, and no Loudness Equalization, Dolby, Nahimic or Realtek effects. macOS/iOS: Spatial Audio and EQ off. Phones: Dolby / EQ / "adapt sound" off. Compressors and loudness equalizers can fill in gaps and change the level of tones.</li>
+        <li><strong>Close other audio apps</strong>, and leave the system volume fixed for the whole test — adjust level only with the slider below.</li>
+      </ul>
+      <div id="hwInfo"></div>
+      <label class="check-row"><input type="checkbox" id="hwCheck" autocomplete="off"> I have checked my audio setup</label>
     </section>
 
     <section class="card" aria-label="Setup and calibration">
       <h2>Setup &amp; Calibration</h2>
       <div class="controls" role="group" aria-label="Calibration controls">
         <div class="control-row">
+          <label class="control-label" for="modeSelect">Test type:</label>
+          <select id="modeSelect" class="styled" autocomplete="off" aria-label="Test type">
+            <option value="gap">Gap Detection (Gaps-in-Noise)</option>
+            <option value="freq">Frequency Discrimination</option>
+          </select>
+        </div>
+
+        <div class="control-row">
           <label class="control-label" for="earSelect">Channel:</label>
-          <select id="earSelect" class="styled" aria-label="Audio channel selection">
+          <select id="earSelect" class="styled" autocomplete="off" aria-label="Audio channel selection">
             <option value="binaural">Binaural</option>
             <option value="left">Left Ear Only</option>
             <option value="right">Right Ear Only</option>
           </select>
+        </div>
+
+        <div class="control-row" id="startGapRow">
+          <label class="control-label" for="startGapSelect">Starting gap:</label>
+          <select id="startGapSelect" class="styled" autocomplete="off" aria-label="Starting gap (ms)"></select>
+        </div>
+
+        <div class="control-row" id="standardFreqRow" style="display:none;">
+          <label class="control-label" for="standardFreqSelect">Standard frequency:</label>
+          <select id="standardFreqSelect" class="styled" autocomplete="off" aria-label="Standard frequency (Hz)" aria-describedby="freqInfo"></select>
+          <div id="freqInfo" class="staircase-info">Standard audiometric 1/3-octave frequencies. The staircase starts with the comparison tone 20% higher than the standard.</div>
         </div>
 
         <div class="control-row">
@@ -163,18 +218,27 @@
         <button id="calNoiseButton" class="secondary">Play Calibration Noise</button>
 
         <div class="control-row">
-          <label class="control-label" for="startGapSelect">Starting gap:</label>
-          <select id="startGapSelect" class="styled" aria-label="Starting gap (ms)"></select>
-        </div>
-
-        <div class="control-row">
           <label class="control-label" for="staircaseSelect">Staircase rule:</label>
-          <select id="staircaseSelect" class="styled" aria-label="Staircase rule" aria-describedby="staircaseInfo"></select>
+          <select id="staircaseSelect" class="styled" autocomplete="off" aria-label="Staircase rule" aria-describedby="staircaseInfo"></select>
           <div id="staircaseInfo" class="staircase-info" aria-live="polite"></div>
         </div>
 
-        <button id="calConfirmButton" class="secondary">Confirm Volume &amp; Channel OK</button>
-        <div id="calibrationStatus" aria-live="polite">Adjust the volume to a comfortable level, then confirm before starting the test.</div>
+        <details class="teach" id="psychDetails">
+          <summary>Why the target % matters in a 2-interval task</summary>
+          <p>In a two-interval forced-choice task you are right <strong>half the time by guessing alone</strong>, so performance runs from 50% (hear nothing) to 100% (hear it every time), not from 0%.</p>
+          <div class="chart-wrap small">
+            <canvas id="psychChart" aria-label="Illustrative two-interval psychometric function with staircase target levels"></canvas>
+          </div>
+          <ul>
+            <li><strong>Where each rule settles.</strong> An N-down/1-up staircase settles where stepping down and stepping up are equally likely: p<sup>N</sup> = 0.5, so p = 0.5<sup>1/N</sup>. That gives 50% (1-down), 70.7% (2-down) and 79.4% (3-down) correct (Levitt, 1971).</li>
+            <li><strong>Correcting for guessing.</strong> If a listener truly hears the difference on a proportion p&prime; of trials and guesses on the rest, then p = p&prime; + 0.5(1 &minus; p&prime;), so p&prime; = (p &minus; 0.5) / 0.5. The 79.4% target is only <strong>&asymp;59%</strong> true detection; 70.7% is <strong>&asymp;41%</strong>; and 50% is <strong>0%</strong> &mdash; pure guessing.</li>
+            <li><strong>Why 1-down/1-up fails here.</strong> Its 50% target is exactly what a listener who hears nothing scores, so the staircase keeps stepping toward the smallest difference. In a yes/no task (like the single-interval GIN page) 50% "yes" is a real detection point, because guessing there is not fixed at 50%.</li>
+            <li><strong>Signal-detection view.</strong> The guessing correction assumes "high-threshold" theory. Signal detection theory describes the same targets as sensitivity d&prime; = &radic;2&middot;z(p): about 0.78 at 70.7% and 1.16 at 79.4%.</li>
+          </ul>
+        </details>
+
+        <button id="calConfirmButton" class="secondary" disabled>Confirm Volume &amp; Channel OK</button>
+        <div id="calibrationStatus" aria-live="polite">Tick the audio-setup checklist, adjust the volume to a comfortable level, then confirm before starting the test.</div>
       </div>
     </section>
 
@@ -184,7 +248,7 @@
         <button id="playBtn" disabled>Play Trial</button>
 
         <div id="choices" aria-hidden="true">
-          <p>Which interval had the gap?</p>
+          <p id="choicesQuestion">Which interval had the gap?</p>
           <div class="choice-buttons">
             <button id="choice1" class="secondary" disabled>First</button>
             <button id="choice2" class="secondary" disabled>Second</button>
@@ -192,6 +256,8 @@
         </div>
 
         <div id="status" aria-live="polite"></div>
+        <div id="narration" aria-live="polite"></div>
+        <div id="progress"></div>
         <p class="keyboard-hint">Keyboard shortcuts: Space = Play Trial, 1 = First, 2 = Second</p>
       </div>
     </section>
@@ -199,8 +265,10 @@
     <section class="card" aria-label="Results">
       <h2>Results</h2>
       <div class="controls">
+        <div id="resultNote" class="staircase-info"></div>
         <button id="exportBtn" class="secondary small">Export Results</button>
         <button id="aboutBtn" class="secondary small" aria-haspopup="dialog">About This Procedure</button>
+        <button id="resetBtn" class="warn small">Reset</button>
       </div>
       <hr class="card-divider">
       <div class="chart-wrap">
@@ -215,46 +283,92 @@
                   max-height:85vh; overflow-y:auto; text-align:left; box-shadow:0 8px 30px rgba(0,0,0,0.3);">
           <h2 id="aboutTitle" style="margin-top:0;">About This Procedure</h2>
 
-          <h3>Task &amp; stimulus</h3>
+          <div data-mode="gap">
+          <h3>Task &amp; stimulus (gap detection)</h3>
           <ul>
               <li>Each trial presents two 1-second broadband noise intervals, played back to back. Exactly one interval contains a brief silent gap; the other is continuous noise. Which interval (first or second) contains the gap is randomized each trial.</li>
-              <li>This is a forced-choice task: you must pick First or Second every trial, even if you're not sure. Forcing a guess (rather than offering an "unsure" option) is what makes this design bias-free — it removes the effect of individual differences in willingness to commit to an answer, so the measured threshold reflects genuine sensitivity rather than response caution.</li>
               <li>Noise is freshly generated per interval per trial, so no waveform repeats.</li>
               <li>Gap onset/offset use a short (~5ms, or half the gap for very short gaps) linear fade rather than an instant cut, to avoid an audible "click" at the edges that could act as a cue independent of the gap itself.</li>
               <li>The gap's position within its interval is randomized per trial (kept at least 100ms from the interval's start/end — i.e. somewhere in the middle 800ms of each 1000ms interval), rather than fixed at the interval's midpoint, so its timing can't be anticipated.</li>
           </ul>
+          </div>
+
+          <div data-mode="freq">
+          <h3>Task &amp; stimulus (frequency discrimination)</h3>
+          <ul>
+              <li>Each trial presents two 400 ms pure tones separated by 500 ms of silence. One is the <strong>standard</strong> (the frequency you chose); the other is the <strong>comparison</strong>, higher by &Delta;f. Which interval holds the higher tone is randomized each trial, and you pick the higher one.</li>
+              <li><strong>Level rove.</strong> Each tone's level is randomly varied by up to &plusmn;3 dB. Headphones do not have a flat frequency response, so the higher tone may come out slightly louder or softer. Without the rove, a listener could learn "louder means higher" and answer from loudness instead of pitch. The rove makes loudness an unreliable cue.</li>
+              <li><strong>Smooth on/off ramps.</strong> Each tone fades in and out over 20 ms with a raised-cosine (smooth S-shaped) ramp. An abrupt start or a short linear ramp spreads energy to other frequencies ("spectral splatter"), heard as a click that could itself be a cue.</li>
+              <li>The standard stays fixed and the comparison is always higher. A listener could in principle compare each tone with a remembered standard; research versions often also rove the standard frequency from trial to trial to prevent this.</li>
+          </ul>
+          </div>
+
+          <h3>Forced choice</h3>
+          <ul>
+              <li>You must pick First or Second every trial, even if you're not sure. Forcing a guess (rather than offering an "unsure" option) is what makes this design bias-free — it removes the effect of individual differences in willingness to commit to an answer, so the measured threshold reflects genuine sensitivity rather than response caution.</li>
+              <li>The price is a 50% guessing floor; see "Why the target % matters" in the Setup card.</li>
+          </ul>
 
           <h3>Channel routing (ear selection)</h3>
           <ul>
-              <li>The Channel selector routes noise to Binaural (both ears), Left Ear Only, or Right Ear Only via a true stereo buffer — the non-selected ear receives silence, not just a quieter signal.</li>
+              <li>The Channel selector routes sound to Binaural (both ears), Left Ear Only, or Right Ear Only via a true stereo buffer — the non-selected ear receives silence, not just a quieter signal.</li>
               <li>Changing the channel mid-session requires re-confirming calibration before the test can continue.</li>
           </ul>
 
-          <h3>Volume calibration &amp; gating</h3>
+          <h3>Audio hardware &amp; volume calibration</h3>
           <ul>
-              <li>Before any scored trial, you must play continuous calibration noise, adjust the volume slider to a comfortable level, and confirm it sounds correct for the selected channel.</li>
+              <li>The audio-setup checklist must be ticked before calibration can be confirmed. A web browser cannot reliably tell whether the output is Bluetooth or whether the sound card is processing the audio, so this relies on you checking.</li>
+              <li>Before any scored trial, you must play the calibration sound (noise for gap detection; a pulsed tone at the standard frequency for frequency discrimination), adjust the volume slider to a comfortable level, and confirm it sounds correct for the selected channel.</li>
               <li>Play Trial and the response buttons are disabled (gated) until calibration is confirmed.</li>
               <li>This standardizes relative comfort and verifies correct ear routing — it does <em>not</em> measure absolute sound pressure level (dB SPL), which depends on your specific headphones/speakers and device volume.</li>
           </ul>
 
           <h3>Practice block</h3>
           <ul>
-              <li>Immediately after calibration, 3 unscored practice trials run using an easy, large gap so you can get familiar with the two-interval task before anything counts.</li>
+              <li>Immediately after calibration, 3 unscored practice trials run using an easy, large difference (a 20 ms gap, or a 30% frequency difference) so you can get familiar with the two-interval task before anything counts.</li>
           </ul>
 
           <h3>Staircase &amp; threshold estimation</h3>
           <ul>
-              <li>An N-down/1-up staircase: the gap only shrinks (harder) after N <em>consecutive</em> correct responses; a single incorrect response (including a wrong guess) immediately grows it (easier) and resets the correct streak. The choice of N sets the accuracy level the staircase converges on (Levitt, 1971):
+              <li>An N-down/1-up staircase: the difference only shrinks (harder) after N <em>consecutive</em> correct responses; a single incorrect response (including a wrong guess) immediately grows it (easier) and resets the correct streak. The choice of N sets the accuracy level the staircase converges on (Levitt, 1971):
                   <ul>
-                      <li><strong>3-down/1-up</strong> → ~79.4% correct. The most conservative (largest) threshold, and the longest test.</li>
-                      <li><strong>2-down/1-up</strong> → ~70.7% correct. A common middle ground: a slightly smaller threshold and a shorter test.</li>
-                      <li><strong>1-down/1-up</strong> → 50% correct. In a two-interval task, guessing alone already scores 50%, so this rule tracks <em>chance</em> performance. It drifts toward the smallest gaps, and its "threshold" does not measure gap detection. It is included only to show why it is unsuitable for a forced-choice task.</li>
+                      <li><strong>3-down/1-up</strong> → ~79.4% correct (&asymp;59% after correcting for guessing). The most conservative (largest) threshold, and the longest test.</li>
+                      <li><strong>2-down/1-up</strong> → ~70.7% correct (&asymp;41% after correcting for guessing). A common middle ground: a slightly smaller threshold and a shorter test.</li>
+                      <li><strong>1-down/1-up</strong> → 50% correct. In a two-interval task, guessing alone already scores 50%, so this rule tracks <em>chance</em> performance. It drifts toward the smallest differences, and its "threshold" does not measure discrimination. It is included only to show why it is unsuitable for a forced-choice task.</li>
                   </ul>
               </li>
               <li>Selected for this session: <strong id="aboutRule">3-down/1-up</strong>. The rule is locked once calibration is confirmed.</li>
+              <li>If the staircase is already at its easiest or hardest level, it cannot move, so no reversal is counted on that trial.</li>
+          </ul>
+
+          <div data-mode="gap">
+          <ul>
+              <li>The gap steps one value at a time through a fixed list (0–20 ms).</li>
               <li>The test stops after 8 reversals (points where the staircase's direction flips).</li>
               <li>Your threshold is estimated as the mean gap duration at the last 6 reversals — the first 2 are discarded, since they reflect the staircase still settling from its starting point rather than steady-state performance.</li>
           </ul>
+          <h3>Reference values</h3>
+          <ul>
+              <li>Musiek et al. (2005), the clinical GIN test, 50 normal-hearing listeners: mean approximate gap threshold 4.8 ms (left ear) and 4.9 ms (right ear). Ear and Hearing 26(6):608–18, <a href="https://doi.org/10.1097/01.aud.0000188069.80699.41" target="_blank" rel="noopener">doi:10.1097/01.aud.0000188069.80699.41</a>.</li>
+              <li>That test is a different procedure (single-interval, calibrated clinical recordings, a different threshold rule), so compare your result only loosely. These are not clinical norms for this page.</li>
+          </ul>
+          </div>
+
+          <div data-mode="freq">
+          <ul>
+              <li><strong>Multiplicative steps.</strong> &Delta;f starts at 20% of the standard and is divided (harder) or multiplied (easier) by a step factor, rather than changed by a fixed number of Hz. Frequency discrimination roughly follows Weber's law (&Delta;f grows with f), so proportional steps are equal-sized on the scale that matters, at any standard frequency.</li>
+              <li><strong>Big steps, then small.</strong> The factor is &times;2 until the 4th reversal, then &times;&radic;2 (&asymp;1.41). Big steps get from the starting point to the threshold region quickly; smaller steps then give a finer estimate.</li>
+              <li>&Delta;f is limited to 0.05%–50% of the standard.</li>
+              <li>The test stops after 12 reversals. The first 4 (made with the big step) are discarded, and the threshold is the <strong>geometric mean</strong> of the last 8. A geometric mean is used because the steps are proportional (equal on a log scale).</li>
+              <li>The result is reported as &Delta;f in Hz and as the <strong>Weber fraction</strong> &Delta;f/f (shown as a %).</li>
+          </ul>
+          <h3>Reference values</h3>
+          <ul>
+              <li>Wier, Jesteadt &amp; Green (1977) measured frequency discrimination in trained listeners across frequency and level. J Acoust Soc Am 61(1):178–84, <a href="https://doi.org/10.1121/1.381251" target="_blank" rel="noopener">doi:10.1121/1.381251</a>. Weber fractions are smallest in the mid frequencies and larger at low frequencies and at 8 kHz. The ranges shown with your result are <em>approximate</em>; check the original paper before quoting them.</li>
+              <li>Micheyl et al. (2006): untrained non-musicians' thresholds were initially more than six times larger than classical musicians', and still about four times larger after 2 hours of practice; 4–8 hours of training brought them down to musicians' levels. Hear Res 219:36–47, <a href="https://doi.org/10.1016/j.heares.2006.05.004" target="_blank" rel="noopener">doi:10.1016/j.heares.2006.05.004</a>.</li>
+              <li>So a first-time listener on an uncalibrated browser setup will usually score well above lab values. These are not clinical norms.</li>
+          </ul>
+          </div>
 
           <button id="aboutCloseButton" class="secondary small" style="margin-top:8px;">Close</button>
       </div>
@@ -265,33 +379,51 @@
     const gapOptions = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 20];
     // start gapIndex set to index of 10ms by default; dropdown will override if changed
     let gapIndex = Math.max(0, gapOptions.indexOf(10));
+
+    // Frequency discrimination: standard audiometric 1/3-octave frequencies,
+    // and a Levitt-style staircase on Δf expressed as % of the standard.
+    const STANDARD_FREQS = [125, 160, 200, 250, 315, 400, 500, 630, 800, 1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000, 6300, 8000];
+    let standardHz = 1000;
+    const FD_START_PCT = 20;
+    const FD_MIN_PCT = 0.05;
+    const FD_MAX_PCT = 50;
+    const FD_STEP_SWITCH_REVERSAL = 4; // ×2 steps until this many reversals, then ×√2
+    const FD_PRACTICE_PCT = 30;
+    const TONE_DURATION_SEC = 0.4;
+    const TONE_ISI_SEC = 0.5;
+    const TONE_RAMP_MS = 20; // raised-cosine on/off ramps, avoids spectral splatter
+    const TONE_AMPLITUDE = 0.5; // headroom so a +3 dB rove can't clip
+    const ROVE_DB = 3;
+    let deltaPct = FD_START_PCT;
+
+    let testMode = 'gap';
     let correctInterval = 1;
+    let currentTrial = null; // the played trial awaiting an answer
     let trialCount = 0;
+    let correctCount = 0;
     let consecutiveCorrect = 0; // N-down/1-up: tracks the current correct streak
-    // Staircase rules, keyed by N (correct-in-a-row needed to shrink the gap).
-    // Targets are the convergence points from Levitt (1971).
+    // Staircase rules, keyed by N (correct-in-a-row needed to make it harder).
+    // Targets are the convergence points from Levitt (1971); `corrected` is
+    // the same point after correcting for the 50% guessing floor.
     const STAIRCASE_RULES = {
       3: {
-        label: '3-down/1-up', target: '79.4', warn: false, wordN: 'three consecutive correct answers',
-        info: 'The gap gets shorter only after <strong>3 correct answers in a row</strong>. Your threshold will be the gap you detect about <strong>79%</strong> of the time: the most conservative (largest) estimate. It needs the most trials, so the test is longest.'
+        label: '3-down/1-up', target: '79.4', corrected: '58.8', warn: false, wordN: 'three consecutive correct answers',
+        info: 'The difference gets smaller only after <strong>3 correct answers in a row</strong>. Your threshold will be the difference you get right about <strong>79%</strong> of the time (&asymp;59% once guessing is allowed for): the most conservative (largest) estimate. It needs the most trials, so the test is longest.'
       },
       2: {
-        label: '2-down/1-up', target: '70.7', warn: false, wordN: 'two consecutive correct answers',
-        info: 'The gap gets shorter after <strong>2 correct answers in a row</strong>. Your threshold will be the gap you detect about <strong>71%</strong> of the time: a common middle ground, with a slightly smaller threshold than 3-down/1-up and a shorter test.'
+        label: '2-down/1-up', target: '70.7', corrected: '41.4', warn: false, wordN: 'two consecutive correct answers',
+        info: 'The difference gets smaller after <strong>2 correct answers in a row</strong>. Your threshold will be the difference you get right about <strong>71%</strong> of the time (&asymp;41% once guessing is allowed for): a common middle ground, with a slightly smaller threshold than 3-down/1-up and a shorter test.'
       },
       1: {
-        label: '1-down/1-up', target: '50', warn: true, wordN: 'every correct answer',
-        info: '&#9888; The gap gets shorter after <strong>every correct answer</strong>. With two intervals, guessing alone gives <strong>50% correct</strong>, so this rule tracks <em>chance</em> performance. The staircase drifts toward the smallest gaps, and the "threshold" it gives does <strong>NOT</strong> reflect your gap detection. Use it only to see why this rule is unsuitable for a 2-interval task. It is the quickest test.'
+        label: '1-down/1-up', target: '50', corrected: '0', warn: true, wordN: 'every correct answer',
+        info: '&#9888; The difference gets smaller after <strong>every correct answer</strong>. With two intervals, guessing alone gives <strong>50% correct</strong>, so this rule tracks <em>chance</em> performance. The staircase drifts toward the smallest differences, and the "threshold" it gives does <strong>NOT</strong> reflect your hearing. Use it only to see why this rule is unsuitable for a 2-interval task. It is the quickest test.'
       }
     };
     let stepsDown = 3;
     const results = [];
     const reversals = []; // trial numbers, for chart plotting
-    const reversalGaps = []; // gap duration (ms) at each reversal, for thresholding
+    const reversalLevels = []; // stimulus level (gap ms or Δf %) at each reversal, for thresholding
     let lastDirection = null;
-    const maxReversals = 8;
-    const DISCARD_FIRST_REVERSALS = 2; // early reversals reflect the staircase still settling, not steady-state
-    const REVERSALS_FOR_THRESHOLD = 6;
     let earMode = 'binaural'; // Track ear selection
 
     const masterGainNode = audioCtx.createGain();
@@ -315,7 +447,141 @@
     const choice2 = document.getElementById('choice2');
     const choicesContainer = document.getElementById('choices');
     const status = document.getElementById('status');
+    const narration = document.getElementById('narration');
+    const progress = document.getElementById('progress');
+    const resultNote = document.getElementById('resultNote');
     const exportBtn = document.getElementById('exportBtn');
+    const hwCheck = document.getElementById('hwCheck');
+    const calConfirmButton = document.getElementById('calConfirmButton');
+
+    // Each test type supplies its stimulus, staircase steps, threshold rule,
+    // chart axis and CSV columns; the trial loop below is shared.
+    const MODES = {
+      gap: {
+        subtitle: 'Gaps-in-Noise',
+        noun: 'gap duration',
+        question: 'Which interval had the gap?',
+        instruction: 'In each trial, you will hear two intervals of white noise. One of the intervals will contain a brief silent gap. Your task is to identify which interval (first or second) contained the gap. Even if you\'re not sure, please make your best guess — every trial needs a First or Second answer for the results to be valid.',
+        disclaimer: 'This is a two-interval forced-choice task, distinct in design from the single-interval "official" clinical GIN test.',
+        calLabel: 'Calibration Noise',
+        maxReversals: 8,
+        discard: 2,
+        use: 6,
+        mean: 'arithmetic',
+        practiceLevel: PRACTICE_EASY_GAP_MS,
+        level: () => gapOptions[gapIndex],
+        format: v => `${v} ms`,
+        harder() { if (gapIndex > 0) { gapIndex--; return true; } return false; },
+        easier() { if (gapIndex < gapOptions.length - 1) { gapIndex++; return true; } return false; },
+        buildTrial(gapMs, target) {
+          return {
+            buffers: [
+              createNoiseBuffer(INTERVAL_DURATION_SEC, target === 1 ? gapMs : 0),
+              createNoiseBuffer(INTERVAL_DURATION_SEC, target === 2 ? gapMs : 0)
+            ],
+            offsets: [0, 1.5],
+            respondAfterMs: 3200,
+            info: {}
+          };
+        },
+        calibrationBuffer: () => createNoiseBuffer(2), // 2s loopable buffer, no gap
+        yScale: () => ({ type: 'linear', title: { display: true, text: 'Gap Duration (ms)' }, min: 0, max: 22 }),
+        tooltip: p => `Trial ${p.x}: ${p.y} ms`,
+        csvHeader: 'Mode,Trial,Gap(ms),Response,Channel,Volume (%)',
+        csvRow: (r, vol) => `Gap,${r.trial},${r.level},${r.correct},${earMode},${vol}`,
+        thresholdText(t) { return `${t.avg.toFixed(2)} ms`; },
+        reference() {
+          return 'Reference: Musiek et al. (2005), clinical GIN test, normal-hearing adults: mean ≈4.8–4.9 ms. That is a different (single-interval) procedure, so compare loosely; not a clinical norm for this page.';
+        },
+        filename: () => 'gin_2afc_results.csv'
+      },
+      freq: {
+        subtitle: 'Frequency Discrimination',
+        noun: 'frequency difference',
+        question: 'Which tone was higher in pitch?',
+        instruction: 'In each trial, you will hear two short tones. One of them is slightly higher in pitch. Your task is to identify which tone (first or second) was higher. The tones also vary a little in loudness at random — ignore loudness and listen for pitch. Even if you\'re not sure, please make your best guess — every trial needs a First or Second answer for the results to be valid.',
+        disclaimer: 'This is a teaching version of a laboratory frequency-discrimination task, not a calibrated clinical test.',
+        calLabel: 'Calibration Tone',
+        maxReversals: 12,
+        discard: FD_STEP_SWITCH_REVERSAL,
+        use: 8,
+        mean: 'geometric',
+        practiceLevel: FD_PRACTICE_PCT,
+        level: () => deltaPct,
+        format: v => `Δf ${formatPct(v)} (${formatHz(standardHz * v / 100)})`,
+        stepFactor: () => reversals.length < FD_STEP_SWITCH_REVERSAL ? 2 : Math.SQRT2,
+        harder() {
+          if (deltaPct <= FD_MIN_PCT) return false;
+          deltaPct = Math.max(FD_MIN_PCT, deltaPct / this.stepFactor());
+          return true;
+        },
+        easier() {
+          if (deltaPct >= FD_MAX_PCT) return false;
+          deltaPct = Math.min(FD_MAX_PCT, deltaPct * this.stepFactor());
+          return true;
+        },
+        buildTrial(pct, target) {
+          const compHz = standardHz * (1 + pct / 100);
+          const roves = [randomRoveDb(), randomRoveDb()];
+          const freqs = target === 1 ? [compHz, standardHz] : [standardHz, compHz];
+          return {
+            buffers: freqs.map((f, i) => createToneBuffer(f, TONE_DURATION_SEC, roves[i])),
+            offsets: [0, TONE_DURATION_SEC + TONE_ISI_SEC],
+            respondAfterMs: (2 * TONE_DURATION_SEC + TONE_ISI_SEC) * 1000 + 200,
+            info: { compHz, roves, stepFactor: this.stepFactor() }
+          };
+        },
+        // Pulsed tone (on 400 ms, off 500 ms) at the standard frequency, so
+        // the level is set with the same kind of sound the test uses.
+        calibrationBuffer() {
+          const buffer = audioCtx.createBuffer(2, Math.floor(audioCtx.sampleRate * (TONE_DURATION_SEC + TONE_ISI_SEC)), audioCtx.sampleRate);
+          const tone = createToneBuffer(standardHz, TONE_DURATION_SEC, 0);
+          for (let ch = 0; ch < 2; ch++) buffer.getChannelData(ch).set(tone.getChannelData(ch));
+          return buffer;
+        },
+        yScale: () => ({
+          type: 'logarithmic',
+          title: { display: true, text: 'Δf (% of standard frequency)' },
+          min: 0.04, max: 60,
+          afterBuildTicks: axis => { axis.ticks = [0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50].map(v => ({ value: v })); },
+          ticks: { callback: v => `${v}%` }
+        }),
+        tooltip: p => `Trial ${p.x}: Δf ${formatPct(p.y)} (${formatHz(standardHz * p.y / 100)})`,
+        csvHeader: 'Mode,Trial,Standard (Hz),Delta f (%),Delta f (Hz),Comparison (Hz),Interval with higher tone,Rove tone1 (dB),Rove tone2 (dB),Step factor,Response,Channel,Volume (%)',
+        csvRow: (r, vol) => `Frequency,${r.trial},${standardHz},${r.level.toFixed(4)},${(standardHz * r.level / 100).toFixed(3)},${r.info.compHz.toFixed(3)},${r.interval},${r.info.roves[0].toFixed(2)},${r.info.roves[1].toFixed(2)},${r.info.stepFactor.toFixed(4)},${r.correct},${earMode},${vol}`,
+        thresholdText(t) { return `Δf = ${formatHz(standardHz * t.avg / 100)} at ${standardHz} Hz — Weber fraction Δf/f = ${formatPct(t.avg)}`; },
+        reference() {
+          return `Reference (approximate): trained listeners in the lab (Wier, Jesteadt & Green, 1977) reach Weber fractions of roughly ${fdReferenceRange(standardHz)} around ${standardHz} Hz. Untrained listeners typically start several times higher and improve with hours of practice (Micheyl et al., 2006). Not a clinical norm.`;
+        },
+        filename: () => `fd_2afc_${standardHz}Hz_results.csv`
+      }
+    };
+    const mode = () => MODES[testMode];
+
+    function formatPct(v) { return v >= 10 ? `${v.toFixed(1)}%` : v >= 1 ? `${v.toFixed(2)}%` : `${v.toFixed(3)}%`; }
+    function formatHz(v) { return v >= 100 ? `${v.toFixed(0)} Hz` : v >= 10 ? `${v.toFixed(1)} Hz` : `${v.toFixed(2)} Hz`; }
+
+    // Approximate trained-listener Weber fractions by frequency region (see
+    // About dialog): smallest in the mid frequencies, larger at the extremes.
+    function fdReferenceRange(f) {
+      if (f <= 250) return '0.5–1%';
+      if (f <= 4000) return '0.2–0.5%';
+      return '0.5–1%';
+    }
+
+    function randomRoveDb() { return (Math.random() * 2 - 1) * ROVE_DB; }
+
+    // Writes a mono sample function into a stereo buffer, routed by earMode
+    // (the non-selected ear gets silence, not a quieter copy).
+    function fillStereo(buffer, sampleFn) {
+      const dataL = buffer.getChannelData(0);
+      const dataR = buffer.getChannelData(1);
+      for (let i = 0; i < buffer.length; i++) {
+        const s = sampleFn(i);
+        dataL[i] = earMode === 'right' ? 0 : s;
+        dataR[i] = earMode === 'left' ? 0 : s;
+      }
+    }
 
     // Chart
     const ctx = document.getElementById('performanceChart').getContext('2d');
@@ -338,9 +604,10 @@
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        plugins: { tooltip: { callbacks: { label: c => mode().tooltip(c.raw) } } },
         scales: {
           x: { title: { display: true, text: 'Trial' }, beginAtZero: true },
-          y: { title: { display: true, text: 'Gap Duration (ms)' }, min: 0, max: 22 }
+          y: MODES.gap.yScale()
         }
       }
     });
@@ -352,22 +619,10 @@
       const buffer = audioCtx.createBuffer(2, length, sampleRate);
       const dataL = buffer.getChannelData(0);
       const dataR = buffer.getChannelData(1);
-      
+
       // Generate noise for the appropriate channel(s)
-      for (let i = 0; i < length; i++) {
-        const noise = Math.random() * 2 - 1;
-        if (earMode === 'binaural') {
-          dataL[i] = noise;
-          dataR[i] = noise;
-        } else if (earMode === 'left') {
-          dataL[i] = noise;
-          dataR[i] = 0; // Silent right
-        } else if (earMode === 'right') {
-          dataL[i] = 0; // Silent left
-          dataR[i] = noise;
-        }
-      }
-      
+      fillStereo(buffer, () => Math.random() * 2 - 1);
+
       // Apply gap if specified: randomized position within the interval (kept
       // clear of the edges), with a short ramp at onset/offset instead of an
       // instant cut, to avoid an audible "click" that could act as a cue
@@ -398,6 +653,24 @@
           dataR[i] *= envelope;
         }
       }
+      return buffer;
+    }
+
+    // Pure tone with raised-cosine on/off ramps. gainDb is the level rove
+    // relative to TONE_AMPLITUDE.
+    function createToneBuffer(freqHz, durationSec, gainDb = 0) {
+      const sampleRate = audioCtx.sampleRate;
+      const length = Math.floor(sampleRate * durationSec);
+      const buffer = audioCtx.createBuffer(2, length, sampleRate);
+      const amp = TONE_AMPLITUDE * Math.pow(10, gainDb / 20);
+      const rampLen = Math.floor(sampleRate * TONE_RAMP_MS / 1000);
+      const phase = 2 * Math.PI * freqHz / sampleRate;
+      fillStereo(buffer, i => {
+        let env = 1;
+        if (i < rampLen) env = 0.5 * (1 - Math.cos(Math.PI * i / rampLen));
+        else if (i >= length - rampLen) env = 0.5 * (1 - Math.cos(Math.PI * (length - 1 - i) / rampLen));
+        return amp * env * Math.sin(phase * i);
+      });
       return buffer;
     }
 
@@ -443,8 +716,9 @@
 
     function startTrial() {
       if (!calibrationConfirmed) return; // extra guard; controls are already disabled
+      const m = mode();
 
-      if (!inPractice && reversals.length >= maxReversals) {
+      if (!inPractice && reversals.length >= m.maxReversals) {
         status.textContent = "Test complete!";
         estimateThreshold();
         return;
@@ -460,12 +734,11 @@
       choicesContainer.setAttribute('aria-hidden','true');
 
       correctInterval = Math.random() < 0.5 ? 1 : 2;
-      const gapMs = inPractice ? PRACTICE_EASY_GAP_MS : gapOptions[gapIndex];
-      const buffer1 = createNoiseBuffer(INTERVAL_DURATION_SEC, correctInterval === 1 ? gapMs : 0);
-      const buffer2 = createNoiseBuffer(INTERVAL_DURATION_SEC, correctInterval === 2 ? gapMs : 0);
+      const level = inPractice ? m.practiceLevel : m.level();
+      const trial = m.buildTrial(level, correctInterval);
+      currentTrial = { level, info: trial.info };
 
-      playBuffer(buffer1, 0);
-      playBuffer(buffer2, 1.5);
+      trial.buffers.forEach((b, i) => playBuffer(b, trial.offsets[i]));
 
       // show choices after playback (slightly after last buffer ends)
       setTimeout(() => {
@@ -474,7 +747,7 @@
         status.textContent = inPractice
           ? `Practice trial ${PRACTICE_TRIAL_COUNT - practiceRemaining + 1} of ${PRACTICE_TRIAL_COUNT} (not scored).`
           : "";
-      }, 3200);
+      }, trial.respondAfterMs);
     }
 
     function startPractice() {
@@ -484,8 +757,12 @@
     }
 
     function submitAnswer(choice) {
+      if (!currentTrial) return; // one answer per played trial
+      const m = mode();
+
       if (inPractice) {
         const isCorrect = (choice === correctInterval);
+        currentTrial = null;
         practiceRemaining--;
         const outcomeText = isCorrect ? "Correct!" : "Incorrect.";
         if (practiceRemaining > 0) {
@@ -493,98 +770,152 @@
         } else {
           inPractice = false;
           status.textContent = `${outcomeText} Practice complete — the real test begins now.`;
+          updateProgress();
         }
         choicesContainer.style.display = "none";
         choicesContainer.setAttribute('aria-hidden','true');
         return;
       }
 
-      const gapMs = gapOptions[gapIndex];
+      const level = currentTrial.level;
+      const info = currentTrial.info;
+      currentTrial = null;
       trialCount++;
 
       const isCorrect = (choice === correctInterval);
-      results.push({ trial: trialCount, gapMs, correct: isCorrect });
-      chart.data.datasets[isCorrect ? 0 : 1].data.push({ x: trialCount, y: gapMs });
+      if (isCorrect) correctCount++;
+      results.push({ trial: trialCount, level, correct: isCorrect, interval: correctInterval, info });
+      chart.data.datasets[isCorrect ? 0 : 1].data.push({ x: trialCount, y: level });
 
       // N-down/1-up (N = stepsDown, chosen at setup): N consecutive correct
-      // responses are required before the gap shrinks (harder); a single
-      // incorrect response immediately grows it (easier) and resets the
-      // correct-streak. Larger N converges on a higher-accuracy point
-      // (see STAIRCASE_RULES).
-      const prevGapIndex = gapIndex;
+      // responses are required before the difference shrinks (harder); a
+      // single incorrect response immediately grows it (easier) and resets
+      // the correct-streak. Larger N converges on a higher-accuracy point
+      // (see STAIRCASE_RULES). A step blocked at the easiest/hardest level
+      // counts as 'same', so it can't produce a false reversal.
+      let direction = 'same';
+      let msg;
       if (isCorrect) {
         consecutiveCorrect++;
         if (consecutiveCorrect >= stepsDown) {
-          if (gapIndex > 0) gapIndex--;
+          const streak = consecutiveCorrect;
           consecutiveCorrect = 0;
+          if (m.harder()) {
+            direction = 'down';
+            msg = `Correct — ${streak} in a row → harder: next ${m.format(m.level())}.`;
+          } else {
+            msg = `Correct — ${streak} in a row, but already at the hardest level, so the level stays and no reversal can be counted.`;
+          }
+        } else {
+          msg = `Correct — ${consecutiveCorrect} of ${stepsDown} in a row; level stays at ${m.format(level)}.`;
         }
       } else {
         consecutiveCorrect = 0;
-        if (gapIndex < gapOptions.length - 1) gapIndex++;
+        if (m.easier()) {
+          direction = 'up';
+          msg = `Incorrect → easier: next ${m.format(m.level())}. Correct-streak reset.`;
+        } else {
+          msg = `Incorrect, but already at the easiest level, so the level stays and no reversal can be counted.`;
+        }
       }
 
-      const direction = gapIndex > prevGapIndex ? 'up' : gapIndex < prevGapIndex ? 'down' : 'same';
       if (direction !== 'same') {
         if (lastDirection && direction !== lastDirection) {
           reversals.push(trialCount);
-          reversalGaps.push(gapMs);
-          chart.data.datasets[2].data.push({ x: trialCount, y: gapMs });
+          reversalLevels.push(level);
+          chart.data.datasets[2].data.push({ x: trialCount, y: level });
+          msg += ` Direction changed: reversal #${reversals.length} recorded at ${m.format(level)}`;
+          msg += reversals.length <= m.discard ? ' (early — will be discarded from the threshold).' : '.';
+          if (testMode === 'freq' && reversals.length === FD_STEP_SWITCH_REVERSAL) {
+            msg += ' Step size now changes from ×2 to ×√2 (finer steps).';
+          }
         }
         lastDirection = direction;
       }
 
       status.textContent = isCorrect ? "Correct!" : "Incorrect.";
+      narration.textContent = msg;
+      updateProgress();
 
       chart.update();
       choicesContainer.style.display = "none";
       choicesContainer.setAttribute('aria-hidden','true');
 
-      if (reversals.length >= maxReversals) {
+      if (reversals.length >= m.maxReversals) {
         status.textContent += " Test complete!";
         estimateThreshold();
       }
     }
 
-    // Discard the first couple of reversals (the staircase is still settling
-    // in from its starting gap) and average the rest, capped at
-    // REVERSALS_FOR_THRESHOLD, for a more stable steady-state estimate.
+    function updateProgress() {
+      const m = mode();
+      if (trialCount === 0) {
+        progress.textContent = calibrationConfirmed && !inPractice
+          ? `Reversals: 0 of ${m.maxReversals} · Starting level: ${m.format(m.level())}`
+          : '';
+        return;
+      }
+      const pct = (100 * correctCount / trialCount).toFixed(0);
+      progress.textContent = `Trials: ${trialCount} · Correct so far: ${pct}% · Reversals: ${reversals.length} of ${m.maxReversals}`;
+    }
+
+    // Discard the early reversals (the staircase is still settling in from
+    // its starting level) and average the rest, capped at the mode's `use`
+    // count, for a more stable steady-state estimate. Frequency steps are
+    // proportional, so its average is geometric.
     function computeThreshold() {
-      const usable = reversalGaps.slice(DISCARD_FIRST_REVERSALS);
+      const m = mode();
+      const usable = reversalLevels.slice(m.discard);
       if (usable.length < 2) return null;
-      const used = usable.slice(-REVERSALS_FOR_THRESHOLD);
-      const avg = used.reduce((sum, v) => sum + v, 0) / used.length;
+      const used = usable.slice(-m.use);
+      const avg = m.mean === 'geometric'
+        ? Math.exp(used.reduce((sum, v) => sum + Math.log(v), 0) / used.length)
+        : used.reduce((sum, v) => sum + v, 0) / used.length;
       return { avg, count: used.length };
     }
 
     function estimateThreshold() {
+      const m = mode();
       const result = computeThreshold();
       const rule = STAIRCASE_RULES[stepsDown];
+      const meanWord = m.mean === 'geometric' ? 'geometric mean' : 'mean';
       if (result) {
-        status.textContent += ` Estimated threshold: ${result.avg.toFixed(2)} ms (${rule.label}, ≈${rule.target}% correct point; mean of last ${result.count} reversals, after discarding the first ${DISCARD_FIRST_REVERSALS})`;
-        if (rule.warn) status.textContent += ' — chance-level rule, not a valid gap-detection threshold.';
+        status.textContent += ` Estimated threshold: ${m.thresholdText(result)} (${rule.label}, ≈${rule.target}% correct point; ${meanWord} of last ${result.count} reversals, after discarding the first ${m.discard})`;
+        if (rule.warn) status.textContent += ' — chance-level rule, not a valid threshold.';
+        resultNote.textContent = `${m.reference()} Your ${rule.label} threshold is the ≈${rule.target}%-correct point (≈${rule.corrected}% after correcting for guessing); studies using a different target will give somewhat different values.`;
+        resultNote.style.display = 'block';
       } else {
         status.textContent += ' Not enough reversals to estimate threshold.';
       }
     }
 
     function exportResults() {
-      let csv = "Trial,Gap(ms),Response,Channel,Volume (%)\n";
+      const m = mode();
       const volumePercent = document.getElementById('volumeSlider').value;
-      results.forEach(r => {
-        csv += `${r.trial},${r.gapMs},${r.correct},${earMode},${volumePercent}\n`;
-      });
-      csv += `\nReversals (ms),${reversalGaps.join(' ')}\n`;
+      let csv = m.csvHeader + "\n";
+      results.forEach(r => { csv += m.csvRow(r, volumePercent) + "\n"; });
+      const unit = testMode === 'freq' ? '(% of standard)' : '(ms)';
+      csv += `\nReversals ${unit},${reversalLevels.map(v => testMode === 'freq' ? v.toFixed(4) : v).join(' ')}\n`;
       const rule = STAIRCASE_RULES[stepsDown];
-      csv += `Staircase Rule,${rule.label},Target % correct,${rule.target}\n`;
+      csv += `Staircase Rule,${rule.label},Target % correct,${rule.target},Guessing-corrected %,${rule.corrected}\n`;
       const result = computeThreshold();
       if (result) {
-        csv += `Estimated Threshold (ms),${result.avg.toFixed(2)},based on last ${result.count} reversals (first ${DISCARD_FIRST_REVERSALS} discarded)\n`;
+        const meanWord = m.mean === 'geometric' ? 'geometric mean of' : 'based on';
+        if (testMode === 'freq') {
+          csv += `Estimated Threshold (% of standard),${result.avg.toFixed(4)},${meanWord} last ${result.count} reversals (first ${m.discard} discarded)\n`;
+          csv += `Estimated Threshold (Hz),${(standardHz * result.avg / 100).toFixed(3)}\n`;
+          csv += `Weber fraction (delta f / f),${(result.avg / 100).toFixed(6)}\n`;
+        } else {
+          csv += `Estimated Threshold (ms),${result.avg.toFixed(2)},${meanWord} last ${result.count} reversals (first ${m.discard} discarded)\n`;
+        }
       }
-      const blob = new Blob([csv], { type: "text/csv" });
+      csv += `Reference,"${m.reference().replace(/"/g, '""')}"\n`;
+      // BOM so Excel reads the Δ/≈ characters as UTF-8
+      const blob = new Blob(["﻿" + csv], { type: "text/csv" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "gin_test_results.csv";
+      a.download = m.filename();
       a.click();
       URL.revokeObjectURL(url);
     }
@@ -614,31 +945,138 @@
       });
     })();
 
+    (function initStandardFreqSelect(){
+      const sel = document.getElementById('standardFreqSelect');
+      STANDARD_FREQS.forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = String(v);
+        opt.text = v >= 1000 ? `${v / 1000} kHz` : `${v} Hz`;
+        sel.appendChild(opt);
+      });
+      sel.value = String(standardHz);
+      sel.addEventListener('change', (e) => {
+        standardHz = Number(e.target.value);
+        stopCalibrationSound(); // the calibration tone is at the old frequency
+        updateHwInfo();
+      });
+    })();
+
+    // Illustrative 2AFC psychometric function (Weibull, 50% floor) with the
+    // three staircase targets; the selected rule's line is highlighted.
+    const psychCurve = x => 0.5 + 0.5 * (1 - Math.exp(-x * x));
+    const psychInverse = p => Math.sqrt(-Math.log(1 - (p - 0.5) / 0.5));
+    const PSYCH_X_MAX = 2.5;
+    const psychChart = new Chart(document.getElementById('psychChart').getContext('2d'), {
+      type: 'scatter',
+      data: { datasets: [] },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        plugins: { tooltip: { enabled: false }, legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+        scales: {
+          x: { min: 0, max: PSYCH_X_MAX, title: { display: true, text: 'Size of difference (gap or Δf) → easier' }, ticks: { display: false } },
+          y: { min: 40, max: 100, title: { display: true, text: '% correct' }, ticks: { stepSize: 10 } }
+        }
+      }
+    });
+
+    function updatePsychChart() {
+      const curve = [];
+      for (let x = 0; x <= PSYCH_X_MAX + 1e-9; x += 0.05) curve.push({ x, y: 100 * psychCurve(x) });
+      const datasets = [{ label: '2AFC psychometric function', data: curve, showLine: true, pointRadius: 0, borderColor: '#1f2430', borderWidth: 2 }];
+      [3, 2, 1].forEach(n => {
+        const r = STAIRCASE_RULES[n];
+        const selected = n === stepsDown;
+        const color = selected ? (r.warn ? '#d9534f' : '#0078D4') : '#b9bec2';
+        const p = Number(r.target) / 100;
+        const xAt = p > 0.5 ? psychInverse(p) : 0;
+        datasets.push({
+          label: `${r.label}: ${r.target}% (${r.corrected}% true)`,
+          data: [{ x: 0, y: 100 * p }, { x: xAt, y: 100 * p }, { x: xAt, y: 40 }],
+          showLine: true, pointRadius: 0, borderDash: [6, 4],
+          borderColor: color, backgroundColor: color, borderWidth: selected ? 3 : 1.5
+        });
+      });
+      psychChart.data.datasets = datasets;
+      psychChart.update();
+    }
+    // Chart.js can't size a canvas inside a closed <details>; resize on open.
+    document.getElementById('psychDetails').addEventListener('toggle', () => psychChart.resize());
+
     // populate staircaseSelect from STAIRCASE_RULES and show the consequence
     // of the selected rule (info panel, instructions, About dialog)
-    (function initStaircaseSelect(){
-      const sel = document.getElementById('staircaseSelect');
+    const staircaseSelect = document.getElementById('staircaseSelect');
+    function applyRule() {
+      stepsDown = Number(staircaseSelect.value);
+      const r = STAIRCASE_RULES[stepsDown];
       const info = document.getElementById('staircaseInfo');
+      info.innerHTML = r.info;
+      info.classList.toggle('warn', r.warn);
+      const noun = mode().noun;
+      document.getElementById('ruleInstruction').textContent =
+        `The ${noun} shrinks after ${r.wordN}, and grows immediately after any incorrect answer`;
+      document.getElementById('aboutRule').textContent = `${r.label} (≈${r.target}% correct)`;
+      updatePsychChart();
+    }
+    (function initStaircaseSelect(){
       [3, 2, 1].forEach(n => {
         const r = STAIRCASE_RULES[n];
         const opt = document.createElement('option');
         opt.value = String(n);
         opt.text = `${r.label} (≈${Math.round(r.target)}% correct${r.warn ? ', chance level' : ''})`;
-        sel.appendChild(opt);
+        staircaseSelect.appendChild(opt);
       });
-      function applyRule() {
-        stepsDown = Number(sel.value);
-        const r = STAIRCASE_RULES[stepsDown];
-        info.innerHTML = r.info;
-        info.classList.toggle('warn', r.warn);
-        document.getElementById('ruleInstruction').textContent =
-          `The gap duration shrinks after ${r.wordN}, and grows immediately after any incorrect answer`;
-        document.getElementById('aboutRule').textContent = `${r.label} (≈${r.target}% correct)`;
-      }
-      sel.value = '3';
-      applyRule();
-      sel.addEventListener('change', applyRule);
+      staircaseSelect.value = '3';
+      staircaseSelect.addEventListener('change', applyRule);
     })();
+
+    // Clears all staircase/session state (not the setup choices).
+    function resetState() {
+      trialCount = 0;
+      correctCount = 0;
+      consecutiveCorrect = 0;
+      results.length = 0;
+      reversals.length = 0;
+      reversalLevels.length = 0;
+      lastDirection = null;
+      currentTrial = null;
+      inPractice = false;
+      practiceRemaining = 0;
+      gapIndex = Math.max(0, gapOptions.indexOf(Number(document.getElementById('startGapSelect').value)));
+      deltaPct = FD_START_PCT;
+      chart.data.datasets.forEach(d => d.data = []);
+      chart.options.scales.y = mode().yScale();
+      chart.update();
+      status.textContent = '';
+      narration.textContent = '';
+      resultNote.textContent = '';
+      resultNote.style.display = 'none';
+      choicesContainer.style.display = 'none';
+      choicesContainer.setAttribute('aria-hidden', 'true');
+      updateProgress();
+    }
+
+    // Switch test type: texts, setup rows, calibration sound and chart axis.
+    const modeSelect = document.getElementById('modeSelect');
+    function applyMode() {
+      testMode = modeSelect.value;
+      const m = mode();
+      stopCalibrationSound();
+      document.getElementById('modeSubtitle').textContent = m.subtitle;
+      document.getElementById('taskInstruction').textContent = m.instruction;
+      document.getElementById('modeDisclaimer').textContent = m.disclaimer;
+      document.getElementById('choicesQuestion').textContent = m.question;
+      document.getElementById('startGapRow').style.display = testMode === 'gap' ? '' : 'none';
+      document.getElementById('standardFreqRow').style.display = testMode === 'freq' ? '' : 'none';
+      document.querySelectorAll('#aboutDialog [data-mode]').forEach(el => {
+        el.style.display = el.dataset.mode === testMode ? '' : 'none';
+      });
+      applyRule();
+      resetState();
+      updateHwInfo();
+    }
+    modeSelect.addEventListener('change', applyMode);
 
     // Set up ear mode selector
     const calibrationStatusEl = document.getElementById('calibrationStatus');
@@ -647,19 +1085,21 @@
       playBtn.disabled = !value;
       choice1.disabled = !value;
       choice2.disabled = !value;
-      // Starting gap is a one-time setup choice, not a per-trial control —
-      // lock it once the test is underway so it can't be changed mid-run
-      // (which would silently reset the staircase's current position).
+      // Test type, starting level and staircase rule are one-time setup
+      // choices, not per-trial controls — lock them once the test is
+      // underway so they can't be changed mid-run (which would reset the
+      // staircase's position or mix reversals from different targets).
+      modeSelect.disabled = value;
       document.getElementById('startGapSelect').disabled = value;
-      // Same for the staircase rule: changing it mid-run would mix reversals
-      // from different convergence targets.
-      document.getElementById('staircaseSelect').disabled = value;
+      document.getElementById('standardFreqSelect').disabled = value;
+      staircaseSelect.disabled = value;
     }
 
     (function initEarSelect(){
       const sel = document.getElementById('earSelect');
       sel.addEventListener('change', (e) => {
         earMode = e.target.value;
+        stopCalibrationSound();
         setCalibrationConfirmed(false);
         calibrationStatusEl.textContent = 'Channel changed — please reconfirm volume and channel before continuing.';
       });
@@ -671,37 +1111,74 @@
       masterGainNode.gain.value = e.target.value / 100;
     });
 
-    // Calibration noise: continuous gapless noise through the selected channel
+    // Hardware hints: what the browser reports. It can't identify Bluetooth
+    // or sound-card processing, so these are heuristics only.
+    function updateHwInfo() {
+      const el = document.getElementById('hwInfo');
+      const parts = [`Browser output: ${audioCtx.sampleRate} Hz sample rate`];
+      const flags = [];
+      if (typeof audioCtx.outputLatency === 'number' && audioCtx.outputLatency > 0) {
+        const ms = Math.round(audioCtx.outputLatency * 1000);
+        parts.push(`reported output delay ${ms} ms`);
+        if (ms > 100) flags.push('The output delay is long, which can mean a wireless (Bluetooth) device.');
+      }
+      if (testMode === 'freq') {
+        const topHz = standardHz * (1 + FD_MAX_PCT / 100);
+        if (audioCtx.sampleRate < 2.5 * topHz) flags.push(`The sample rate is too low to reproduce tones up to ${formatHz(topHz)} cleanly.`);
+      }
+      el.innerHTML = parts.join(', ') + '. A browser cannot reliably detect Bluetooth or sound-card processing, so please check the list above yourself.'
+        + flags.map(f => ` <span class="flag">&#9888; ${f}</span>`).join('');
+    }
+
+    function stopCalibrationSound() {
+      if (calibrationSource) {
+        calibrationSource.stop();
+        calibrationSource = null;
+      }
+      calNoiseButton.textContent = `Play ${mode().calLabel}`;
+    }
+
+    // Calibration sound: continuous gapless noise (gap mode) or a pulsed
+    // tone at the standard frequency (frequency mode), through the selected channel
     const calNoiseButton = document.getElementById('calNoiseButton');
     calNoiseButton.addEventListener('click', async () => {
       if (audioCtx.state === 'suspended') await audioCtx.resume().catch(() => {});
       if (calibrationSource) {
-        calibrationSource.stop();
-        calibrationSource = null;
-        calNoiseButton.textContent = 'Play Calibration Noise';
+        stopCalibrationSound();
         return;
       }
-      const buffer = createNoiseBuffer(2); // 2s loopable buffer, no gap
       const source = audioCtx.createBufferSource();
-      source.buffer = buffer;
+      source.buffer = mode().calibrationBuffer();
       source.loop = true;
       source.connect(masterGainNode);
       source.start();
       calibrationSource = source;
-      calNoiseButton.textContent = 'Stop Calibration Noise';
+      calNoiseButton.textContent = `Stop ${mode().calLabel}`;
+      setTimeout(updateHwInfo, 500); // output latency is only reported once audio runs
+    });
+
+    hwCheck.addEventListener('change', () => {
+      calConfirmButton.disabled = !hwCheck.checked;
     });
 
     // Confirm calibration: gates the main test controls, then starts the practice block
-    document.getElementById('calConfirmButton').addEventListener('click', () => {
-      if (calibrationSource) {
-        calibrationSource.stop();
-        calibrationSource = null;
-        calNoiseButton.textContent = 'Play Calibration Noise';
-      }
+    calConfirmButton.addEventListener('click', () => {
+      if (!hwCheck.checked) return;
+      stopCalibrationSound();
       setCalibrationConfirmed(true);
+      const freqNote = testMode === 'freq' ? `, Standard: ${standardHz} Hz` : '';
       calibrationStatusEl.textContent =
-        `Calibration confirmed (Volume: ${volumeSlider.value}%, Channel: ${earMode}). A short practice round starts now.`;
+        `Calibration confirmed (Volume: ${volumeSlider.value}%, Channel: ${earMode}${freqNote}). A short practice round starts now.`;
       startPractice();
+    });
+
+    // Reset: clear the session and unlock the setup choices, e.g. to run the
+    // other test type without reloading.
+    document.getElementById('resetBtn').addEventListener('click', () => {
+      stopCalibrationSound();
+      resetState();
+      setCalibrationConfirmed(false);
+      calibrationStatusEl.textContent = 'Reset — choose your settings, then confirm volume & channel to start again.';
     });
 
     // About dialog
@@ -752,6 +1229,8 @@
         choice2.click();
       }
     });
+
+    applyMode();
   </script>
 </body>
 </html>
